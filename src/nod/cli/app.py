@@ -5,6 +5,7 @@ import re
 import typer
 from rich.console import Console
 from rich.table import Table
+from sqlalchemy.exc import SQLAlchemyError
 
 from nod.application.services import Services
 from nod.domain.enums import ModuleStatus, Priority, WorkItemStatus, WorkItemType
@@ -33,7 +34,11 @@ def root() -> Path:
 def require_project():
     factory = create_session_factory(root())
     session = factory()
-    project = ProjectRepository(session).get()
+    try:
+        project = ProjectRepository(session).get()
+    except SQLAlchemyError:
+        session.close()
+        raise typer.BadParameter("Nod is not initialized. Run `nod init` first.")
     if not project:
         session.close()
         raise typer.BadParameter("Nod is not initialized. Run `nod init` first.")

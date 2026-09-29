@@ -13,6 +13,13 @@ def setup(tmp_path: Path) -> Path:
     return tmp_path
 
 
+def test_board_before_init_fails_cleanly(tmp_path):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    result = run("board", cwd=tmp_path)
+    assert result.returncode != 0
+    assert "not initialized" in result.stderr
+
+
 def test_task_creation_with_description_and_estimate(tmp_path):
     root = setup(tmp_path)
     assert run("module", "add", "Vault", cwd=root).returncode == 0

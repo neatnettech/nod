@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
+from sqlalchemy.exc import SQLAlchemyError
 
 from nod.infrastructure.database import create_session_factory
 from nod.infrastructure.repositories import ProjectRepository
@@ -12,7 +13,11 @@ mcp = FastMCP("nod")
 def service():
     root = Path.cwd()
     session = create_session_factory(root)()
-    project = ProjectRepository(session).get()
+    try:
+        project = ProjectRepository(session).get()
+    except SQLAlchemyError:
+        session.close()
+        raise RuntimeError("Nod is not initialized in this repository.")
     if not project:
         session.close()
         raise RuntimeError("Nod is not initialized in this repository.")
