@@ -6,6 +6,19 @@ Nod lives in your repository: project state is stored in `.nod/nod.db`, so
 the plan travels with the code. Humans drive it through a focused CLI,
 coding agents drive the same state through an MCP server.
 
+## Install
+
+```bash
+# released version from PyPI (both nod and nod-mcp on PATH)
+pipx install nod-cli
+
+# bleeding edge, straight from main
+pipx install git+https://github.com/neatnettech/nod.git
+```
+
+After a PyPI release, update with `pipx upgrade nod-cli`. For git installs,
+run `pipx reinstall nod-cli` to pick up new commits.
+
 ## Quick start
 
 ```bash
@@ -61,3 +74,7 @@ MCP client at `nod-mcp` from inside the repository.
 pip install -e ".[dev]"
 pytest
 ```
+
+Releases: tag a version (`v0.1.0-rc.1`, then `v0.1.0`) and push it. The
+`publish` workflow builds the version from the tag and publishes to PyPI via
+trusted publishing. Requires Python 3.13+.

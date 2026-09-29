@@ -1,8 +1,22 @@
 [project]
-name = "nod"
-version = "0.1.0"
+name = "nod-cli"
+dynamic = ["version"]
 description = "Git-native project management for humans and coding agents."
 requires-python = ">=3.13"
+license = { text = "MIT" }
+readme = "README.md"
+authors = [{ name = "neatnettech" }]
+keywords = ["project-management", "cli", "kanban", "mcp", "git"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS :: MacOS X",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development",
+]
 dependencies = [
   "alembic>=1.16,<2",
   "mcp>=1.9,<2",
@@ -12,6 +26,10 @@ dependencies = [
   "sqlalchemy>=2.0,<3",
   "typer>=0.16,<1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/neatnettech/nod"
+Repository = "https://github.com/neatnettech/nod"
 
 [project.optional-dependencies]
 dev = [
@@ -24,8 +42,11 @@ nod = "nod.cli.app:app"
 nod-mcp = "nod.mcp.server:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/nod"]
