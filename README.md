@@ -1,5 +1,10 @@
 # Nod
 
+[![CI](https://github.com/neatnettech/nod/actions/workflows/ci.yml/badge.svg)](https://github.com/neatnettech/nod/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/nod-cli)](https://pypi.org/project/nod-cli/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-donate-yellow?logo=buymeacoffee)](https://buymeacoffee.com/neatnettech)
+
 Git-native project management for humans and coding agents.
 
 Nod lives in your repository: project state is stored in `.nod/nod.db`, so
