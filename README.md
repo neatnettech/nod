@@ -45,6 +45,10 @@ nod init
 * **Work items** are epics, stories, tasks, and bugs:
   `nod task add "Seed categories" --module vault --cycle sprint-1 --estimate 2h`
 * **Dependencies** order the work: `nod depends OSS-2 OSS-1`
+* **Branch flow** says where the work lives and goes: `--branch` plus optional
+  `--from-branch` (the branch or tag it is cut from) and `--to-branch` (where it
+  merges), for example `nod task set OSS-2 --from-branch chore/ground --to-branch main`
+  for a long lived branch that lands on main later
 
 ## Views
 
@@ -81,6 +85,10 @@ MCP client at `nod-mcp` from inside the repository.
 pip install -e ".[dev]"
 pytest
 ```
+
+Schema changes ship as append only `MIGRATIONS` in
+`src/nod/infrastructure/database.py`, tracked by SQLite's `user_version`, so an
+existing `.nod/nod.db` upgrades in place on its next command.
 
 Releases: tag a version (`v0.1.0-rc.1`, then `v0.1.0`) and push it. The
 `publish` workflow builds the version from the tag and publishes to PyPI via

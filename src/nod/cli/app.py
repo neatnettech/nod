@@ -106,6 +106,13 @@ STATUS_GLYPHS = {
 }
 
 
+def branch_flow(from_branch: str | None, to_branch: str | None) -> str:
+    """'main → main' style summary of where a branch was cut from and merges to."""
+    if not from_branch and not to_branch:
+        return ""
+    return f"{from_branch or '?'} → {to_branch or '?'}"
+
+
 def render_dependency_tree(graph) -> list[str]:
     """ASCII tree of prerequisites. Arrow points to the dependent item."""
     children: dict = {}
@@ -135,6 +142,9 @@ def render_dependency_tree(graph) -> list[str]:
         branch = attrs.get("branch")
         if branch:
             text += f"  ⎇ {branch}"
+        flow = branch_flow(attrs.get("from_branch"), attrs.get("to_branch"))
+        if flow:
+            text += f"  ({flow})"
         return text
 
     def draw_children(node: str, prefix: str) -> None:
@@ -414,6 +424,8 @@ def task_add(
     cycle: str = typer.Option(None, "--cycle"),
     estimate: str = typer.Option(None, "--estimate"),
     branch: str = typer.Option(None, "--branch"),
+    from_branch: str = typer.Option(None, "--from-branch", help="Branch or tag the work is cut from."),
+    to_branch: str = typer.Option(None, "--to-branch", help="Branch the work merges into."),
     as_json: bool = typer.Option(False, "--json"),
 ):
     session, project = require_project()
@@ -426,7 +438,7 @@ def task_add(
             priority=Priority(priority), module=module_obj, cycle=cycle_obj,
             estimate=_parse_hours(estimate),
             status=WorkItemStatus(status) if status else None,
-            branch=branch,
+            branch=branch, from_branch=from_branch, to_branch=to_branch,
         )
         output(result, as_json)
     except NodError as exc:
@@ -447,6 +459,8 @@ def task_set(
     cycle: str = typer.Option(None, "--cycle"),
     estimate: str = typer.Option(None, "--estimate"),
     branch: str = typer.Option(None, "--branch"),
+    from_branch: str = typer.Option(None, "--from-branch", help="Branch or tag the work is cut from."),
+    to_branch: str = typer.Option(None, "--to-branch", help="Branch the work merges into."),
     as_json: bool = typer.Option(False, "--json"),
 ):
     session, project = require_project()
@@ -458,6 +472,7 @@ def task_set(
             identifier, title=title, description=description, append=append,
             status=status, priority=priority, module=module_obj, cycle=cycle_obj,
             branch=branch, estimate=_parse_hours(estimate),
+            from_branch=from_branch, to_branch=to_branch,
         )
         output(result, as_json)
     except NodError as exc:
@@ -510,7 +525,8 @@ def task_list(
             table.add_row(
                 x.identifier, x.title, modules.get(x.module_id) or "",
                 f"{x.estimate:g}h" if x.estimate else "",
-                x.status.value, x.priority.value, x.branch_name or "",
+                x.status.value, x.priority.value,
+                "\n".join(filter(None, [x.branch_name, branch_flow(x.from_branch, x.to_branch)])),
             )
         console.print(table)
     finally:

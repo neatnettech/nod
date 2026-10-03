@@ -76,6 +76,8 @@ class WorkItemModel(Base):
     assignee_id: Mapped[str | None] = mapped_column(ForeignKey("members.id"))
     estimate: Mapped[float | None] = mapped_column(Float)
     branch_name: Mapped[str | None] = mapped_column(String(255))
+    from_branch: Mapped[str | None] = mapped_column(String(255))  # where the branch was cut from
+    to_branch: Mapped[str | None] = mapped_column(String(255))    # where it merges
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

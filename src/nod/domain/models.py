@@ -70,6 +70,8 @@ class WorkItem:
     assignee_id: UUID | None = None
     estimate: float | None = None
     branch_name: str | None = None
+    from_branch: str | None = None
+    to_branch: str | None = None
     completed_at: datetime | None = None
 
 

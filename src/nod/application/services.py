@@ -93,7 +93,7 @@ class Services:
         self.session.commit()
         return cycle
 
-    def create_task(self, title: str, description=None, type_=WorkItemType.TASK, priority=Priority.MEDIUM, module=None, cycle=None, estimate=None, status=None, branch=None):
+    def create_task(self, title: str, description=None, type_=WorkItemType.TASK, priority=Priority.MEDIUM, module=None, cycle=None, estimate=None, status=None, branch=None, from_branch=None, to_branch=None):
         if not title.strip():
             raise ValidationError("Task title cannot be empty.")
         for attempt in range(5):  # ponytail: SQLite serializes writers (busy_timeout); the loser rereads max(seq)
@@ -107,6 +107,8 @@ class Services:
                 estimate=estimate,
                 status=status or WorkItemStatus.TODO,
                 branch_name=branch,
+                from_branch=from_branch,
+                to_branch=to_branch,
             )
             self.items.add(item)
             try:
@@ -119,7 +121,8 @@ class Services:
 
     def update_task(
         self, identifier: str, title=None, description=None, append=None,
-        status=None, priority=None, module=None, cycle=None, branch=None, estimate=None
+        status=None, priority=None, module=None, cycle=None, branch=None, estimate=None,
+        from_branch=None, to_branch=None,
     ):
         item = self.items.get(self.project.id, identifier)
         if not item:
@@ -140,6 +143,10 @@ class Services:
             item.cycle_id = cycle.id
         if branch is not None:
             item.branch_name = branch
+        if from_branch is not None:
+            item.from_branch = from_branch
+        if to_branch is not None:
+            item.to_branch = to_branch
         if estimate is not None:
             item.estimate = estimate
         self.items.update(item)
@@ -191,6 +198,8 @@ class Services:
                 priority=item.priority.value,
                 description=item.description or "",
                 branch=item.branch_name,
+                from_branch=item.from_branch,
+                to_branch=item.to_branch,
                 module=modules.get(item.module_id),
             )
         rows = self.session.scalars(select(WorkItemRelationModel)).all()
