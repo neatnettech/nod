@@ -47,8 +47,7 @@ def work_item_list(
     from nod.domain.enums import WorkItemStatus
     session, svc = service()
     try:
-        module_obj = svc.modules.get(module) if module else None
-        cycle_obj = svc.cycles.get(cycle) if cycle else None
+        module_obj, cycle_obj = svc.scope(module, cycle)
         rows = svc.items.list(
             svc.project.id,
             status=WorkItemStatus(status) if status else None,
@@ -89,8 +88,7 @@ def work_item_create(
     from nod.domain.enums import WorkItemType, Priority
     session, svc = service()
     try:
-        module_obj = svc.modules.get(module) if module else None
-        cycle_obj = svc.cycles.get(cycle) if cycle else None
+        module_obj, cycle_obj = svc.scope(module, cycle)
         item = svc.create_task(
             title, description=description, type_=WorkItemType(type),
             priority=Priority(priority), module=module_obj, cycle=cycle_obj,
@@ -118,8 +116,7 @@ def work_item_update(
 ) -> dict:
     session, svc = service()
     try:
-        module_obj = svc.modules.get(module) if module else None
-        cycle_obj = svc.cycles.get(cycle) if cycle else None
+        module_obj, cycle_obj = svc.scope(module, cycle)
         item = svc.update_task(
             identifier, title=title, description=description,
             append=description_append, status=status, priority=priority,
@@ -136,8 +133,7 @@ def board(module: str | None = None, cycle: str | None = None) -> dict:
     from nod.domain.enums import WorkItemStatus
     session, svc = service()
     try:
-        module_obj = svc.modules.get(module) if module else None
-        cycle_obj = svc.cycles.get(cycle) if cycle else None
+        module_obj, cycle_obj = svc.scope(module, cycle)
         items = svc.items.list(svc.project.id, module=module_obj, cycle=cycle_obj)
         return {
             status.value: [
@@ -169,10 +165,10 @@ def timeline() -> list[dict]:
 
 
 @mcp.tool()
-def dependency_graph() -> dict:
+def dependency_graph(module: str | None = None, cycle: str | None = None) -> dict:
     session, svc = service()
     try:
-        g = svc.graph()
+        g = svc.graph(*svc.scope(module, cycle))
         return {
             "nodes": [{"id": n, **attrs} for n, attrs in g.nodes(data=True)],
             "edges": [{"source": s, "target": t, **attrs} for s, t, attrs in g.edges(data=True)],

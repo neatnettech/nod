@@ -145,6 +145,8 @@ def render_dependency_tree(graph) -> list[str]:
         flow = branch_flow(attrs.get("from_branch"), attrs.get("to_branch"))
         if flow:
             text += f"  ({flow})"
+        if attrs.get("needs_outside"):
+            text += f"  (needs {', '.join(attrs['needs_outside'])} outside this view)"
         if attrs.get("due_date"):
             text += f"  due {attrs['due_date']}" + ("  OVERDUE" if attrs.get("overdue") else "")
         return text
@@ -172,11 +174,19 @@ def render_dependency_tree(graph) -> list[str]:
 
 
 @app.command()
-def graph(as_json: bool = typer.Option(False, "--json")):
-    """Graph of work item dependencies."""
+def graph(
+    module: str = typer.Option(None, "--module"),
+    cycle: str = typer.Option(None, "--cycle"),
+    as_json: bool = typer.Option(False, "--json"),
+):
+    """Graph of work item dependencies, optionally for one module and/or cycle."""
     session, project = require_project()
     try:
-        g = Services(session, project).graph()
+        services = Services(session, project)
+        try:
+            g = services.graph(*services.scope(module, cycle))
+        except NodError as exc:
+            raise typer.BadParameter(str(exc))
         if as_json:
             data = {
                 "nodes": [{"id": n, **attrs} for n, attrs in g.nodes(data=True)],
@@ -203,8 +213,10 @@ def board(
     session, project = require_project()
     try:
         services = Services(session, project)
-        module_obj = services.modules.get(module) if module else None
-        cycle_obj = services.cycles.get(cycle) if cycle else None
+        try:
+            module_obj, cycle_obj = services.scope(module, cycle)
+        except NodError as exc:
+            raise typer.BadParameter(str(exc))
         items = services.items.list(project.id, module=module_obj, cycle=cycle_obj)
         if as_json:
             data = {
@@ -434,8 +446,7 @@ def task_add(
     session, project = require_project()
     try:
         services = Services(session, project)
-        module_obj = services.modules.get(module) if module else None
-        cycle_obj = services.cycles.get(cycle) if cycle else None
+        module_obj, cycle_obj = services.scope(module, cycle)
         result = services.create_task(
             title, description=description, type_=WorkItemType(type_),
             priority=Priority(priority), module=module_obj, cycle=cycle_obj,
@@ -470,8 +481,7 @@ def task_set(
     session, project = require_project()
     try:
         services = Services(session, project)
-        module_obj = services.modules.get(module) if module else None
-        cycle_obj = services.cycles.get(cycle) if cycle else None
+        module_obj, cycle_obj = services.scope(module, cycle)
         result = services.update_task(
             identifier, title=title, description=description, append=append,
             status=status, priority=priority, module=module_obj, cycle=cycle_obj,
@@ -510,8 +520,10 @@ def task_list(
     session, project = require_project()
     try:
         services = Services(session, project)
-        module_obj = services.modules.get(module) if module else None
-        cycle_obj = services.cycles.get(cycle) if cycle else None
+        try:
+            module_obj, cycle_obj = services.scope(module, cycle)
+        except NodError as exc:
+            raise typer.BadParameter(str(exc))
         rows = services.items.list(
             project.id,
             status=WorkItemStatus(status) if status else None,

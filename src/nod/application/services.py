@@ -206,7 +206,21 @@ class Services:
                 graph.add_edge(source.identifier, target.identifier)
         return graph
 
-    def graph(self):
+    def scope(self, module: str | None = None, cycle: str | None = None):
+        """Resolve optional module and cycle slugs. An unknown slug is an error, never a
+        silently unfiltered (or unassigned) result."""
+        module_obj = self.modules.get(module) if module else None
+        if module and module_obj is None:
+            raise NotFoundError(f"Module not found: {module}")
+        cycle_obj = self.cycles.get(cycle) if cycle else None
+        if cycle and cycle_obj is None:
+            raise NotFoundError(f"Cycle not found: {cycle}")
+        return module_obj, cycle_obj
+
+    def graph(self, module=None, cycle=None):
+        """Dependency graph of the items in scope (a resolved module and/or cycle). A
+        prerequisite outside the scope is not drawn; the item lists it under
+        ``needs_outside`` so a blocker in another release or area stays visible."""
         from nod.infrastructure.models import WorkItemRelationModel, WorkItemModel
         graph = nx.DiGraph()
         items = self.items.list(self.project.id)
@@ -231,4 +245,12 @@ class Services:
             target = self.session.get(WorkItemModel, row.target_work_item_id)
             if source and target:
                 graph.add_edge(source.identifier, target.identifier, relation=row.relation_type)
-        return graph
+        if module is None and cycle is None:
+            return graph
+        keep = {i.identifier for i in self.items.list(self.project.id, module=module, cycle=cycle)}
+        for n in keep:
+            # depends_on points at the prerequisite, blocks points away from it
+            needs = [v for v in graph.successors(n) if graph.edges[n, v].get("relation") == "depends_on"]
+            needs += [u for u in graph.predecessors(n) if graph.edges[u, n].get("relation") == "blocks"]
+            graph.nodes[n]["needs_outside"] = sorted(x for x in needs if x not in keep)
+        return graph.subgraph(keep).copy()
