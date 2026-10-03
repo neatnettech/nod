@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 import networkx as nx
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from nod.domain.enums import (
     CycleStatus,
@@ -95,20 +96,26 @@ class Services:
     def create_task(self, title: str, description=None, type_=WorkItemType.TASK, priority=Priority.MEDIUM, module=None, cycle=None, estimate=None, status=None, branch=None):
         if not title.strip():
             raise ValidationError("Task title cannot be empty.")
-        sequence = self.items.next_sequence(self.project.id)
-        item = WorkItem(
-            uuid4(), self.project.id, sequence,
-            f"{self.project.identifier}-{sequence}", title.strip(),
-            description=description, type=type_, priority=priority,
-            module_id=module.id if module else None,
-            cycle_id=cycle.id if cycle else None,
-            estimate=estimate,
-            status=status or WorkItemStatus.TODO,
-            branch_name=branch,
-        )
-        self.items.add(item)
-        self.session.commit()
-        return item
+        for attempt in range(5):  # ponytail: SQLite serializes writers (busy_timeout); the loser rereads max(seq)
+            sequence = self.items.next_sequence(self.project.id)
+            item = WorkItem(
+                uuid4(), self.project.id, sequence,
+                f"{self.project.identifier}-{sequence}", title.strip(),
+                description=description, type=type_, priority=priority,
+                module_id=module.id if module else None,
+                cycle_id=cycle.id if cycle else None,
+                estimate=estimate,
+                status=status or WorkItemStatus.TODO,
+                branch_name=branch,
+            )
+            self.items.add(item)
+            try:
+                self.session.commit()
+                return item
+            except IntegrityError:
+                self.session.rollback()
+                if attempt == 4:
+                    raise
 
     def update_task(
         self, identifier: str, title=None, description=None, append=None,

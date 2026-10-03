@@ -1,9 +1,7 @@
-from pathlib import Path
-
 from mcp.server.fastmcp import FastMCP
 from sqlalchemy.exc import SQLAlchemyError
 
-from nod.infrastructure.database import create_session_factory
+from nod.infrastructure.database import create_session_factory, db_path
 from nod.infrastructure.repositories import ProjectRepository
 from nod.application.services import Services
 
@@ -11,8 +9,10 @@ mcp = FastMCP("nod")
 
 
 def service():
-    root = Path.cwd()
-    session = create_session_factory(root)()
+    db = db_path()
+    if not db.exists():
+        raise RuntimeError("Nod is not initialized in this repository.")
+    session = create_session_factory(db)()
     try:
         project = ProjectRepository(session).get()
     except SQLAlchemyError:

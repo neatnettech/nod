@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from nod.application.services import Services
 from nod.domain.enums import ModuleStatus, Priority, WorkItemStatus, WorkItemType
 from nod.domain.errors import NodError
-from nod.infrastructure.database import create_schema, create_session_factory
+from nod.infrastructure.database import create_schema, create_session_factory, db_path
 from nod.infrastructure.repositories import ProjectRepository
 from nod.infrastructure.git import GitService
 
@@ -27,12 +27,11 @@ console = Console()
 _UNITS = {"h": 1, "m": 1 / 60, "d": 8}
 
 
-def root() -> Path:
-    return Path.cwd()
-
-
 def require_project():
-    factory = create_session_factory(root())
+    db = db_path()
+    if not db.exists():
+        raise typer.BadParameter("Nod is not initialized. Run `nod init` first.")
+    factory = create_session_factory(db)
     session = factory()
     try:
         project = ProjectRepository(session).get()
@@ -68,21 +67,21 @@ def _parse_hours(value: str | None) -> float | None:
 @app.command()
 def init(identifier: str = typer.Option("NOD", "--identifier"), name: str = typer.Option(None, "--name")):
     """Initialize Nod in the current Git repository."""
-    r = root()
-    git = GitService(r)
+    git = GitService(Path.cwd())
     if not git.is_repository():
         raise typer.BadParameter("Current directory is not a Git repository.")
-    create_schema(r)
-    factory = create_session_factory(r)
+    db = db_path()
+    create_schema(db)
+    factory = create_session_factory(db)
     session = factory()
     if not ProjectRepository(session).get():
         from nod.domain.models import Project
         from uuid import uuid4
-        project = Project(uuid4(), identifier.upper(), name or r.name)
+        project = Project(uuid4(), identifier.upper(), name or db.parent.parent.name)
         ProjectRepository(session).add(project)
         session.commit()
     session.close()
-    console.print("[green]Initialized Nod[/green] in .nod/")
+    console.print("[green]Initialized Nod[/green] in", db)
 
 
 @app.command("depends")

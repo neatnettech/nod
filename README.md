@@ -7,9 +7,11 @@
 
 Git-native project management for humans and coding agents.
 
-Nod lives in your repository: project state is stored in `.nod/nod.db`, so
-the plan travels with the code. Humans drive it through a focused CLI,
-coding agents drive the same state through an MCP server.
+Nod lives in your repository: project state is stored in `.nod/nod.db` at
+the root of the main checkout, so the plan travels with the code. Every git
+worktree and subdirectory shares that one database; set `NOD_DB` to use a
+different file. Humans drive it through a focused CLI, coding agents drive
+the same state through an MCP server.
 
 ## Install
 
