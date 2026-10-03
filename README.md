@@ -69,6 +69,10 @@ nod graph                        # ASCII dependency diagram
 prerequisites it does not draw (`needs NOD-7 outside this view`). Items not yet
 placed in a module or a cycle are flagged ORPHANED, and `--orphaned` shows only them.
 
+On the board each item's ID takes its module's colour and its title ends with its
+cycle's letter (`[A]`, `[B]`, in date order); a legend under the board explains the
+colours and letters shown. `nod board --json` names each item's module and cycle.
+
 The dependency graph renders as a tree of prerequisite arrows with status
 glyphs and branch names:
 

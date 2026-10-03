@@ -137,9 +137,15 @@ def board(module: str | None = None, cycle: str | None = None, orphaned: bool = 
     try:
         module_obj, cycle_obj = svc.scope(module, cycle)
         items = svc.items.list(svc.project.id, module=module_obj, cycle=cycle_obj, orphaned=orphaned)
+        module_slug = {m.id: m.slug for m in svc.modules.list()}
+        cycle_slug = {c.id: c.slug for c in svc.cycles.list()}
         return {
             status.value: [
-                {"identifier": x.identifier, "title": x.title, "priority": x.priority.value, "estimate": x.estimate}
+                {
+                    "identifier": x.identifier, "title": x.title, "priority": x.priority.value,
+                    "estimate": x.estimate, "module": module_slug.get(x.module_id),
+                    "cycle": cycle_slug.get(x.cycle_id),
+                }
                 for x in items if x.status == status
             ]
             for status in WorkItemStatus

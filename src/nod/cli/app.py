@@ -5,6 +5,7 @@ import re
 import typer
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 from sqlalchemy.exc import SQLAlchemyError
 
 from nod.application.services import Services, is_overdue, missing_placement
@@ -22,7 +23,7 @@ app.add_typer(module_app, name="module")
 app.add_typer(cycle_app, name="cycle")
 app.add_typer(task_app, name="task")
 
-console = Console()
+console = Console(markup=False)  # stored titles and names are data, never Rich markup
 
 _UNITS = {"h": 1, "m": 1 / 60, "d": 8}
 
@@ -81,7 +82,7 @@ def init(identifier: str = typer.Option("NOD", "--identifier"), name: str = type
         ProjectRepository(session).add(project)
         session.commit()
     session.close()
-    console.print("[green]Initialized Nod[/green] in", db)
+    console.print("Initialized Nod in", db, style="green")
 
 
 @app.command("depends")
@@ -90,11 +91,37 @@ def depends(source: str, target: str):
     session, project = require_project()
     try:
         Services(session, project).add_dependency(source, target)
-        console.print(f"[green]{source} depends on {target}[/green]")
+        console.print(f"{source} depends on {target}", style="green")
     except NodError as exc:
         raise typer.BadParameter(str(exc))
     finally:
         session.close()
+
+
+PALETTE = (
+    "cyan", "magenta", "green", "yellow", "blue", "red",
+    "bright_cyan", "bright_magenta", "bright_green", "bright_yellow", "bright_blue", "bright_red",
+)
+
+
+def cycle_tag(index: int) -> str:
+    """A, B, ... Z, AA, AB: a short label that survives no colour terminals and pipes."""
+    label = ""
+    index += 1
+    while index:
+        index, rest = divmod(index - 1, 26)
+        label = chr(65 + rest) + label
+    return label
+
+
+def placement_keys(services):
+    """A stable colour per module (name order) and a letter per cycle (date order, then
+    name), shared by the board cells and their legend."""
+    modules = services.modules.list()
+    cycles = sorted(services.cycles.list(), key=lambda c: (c.start_date or "9999-99-99", c.name))
+    colour = {m.id: PALETTE[i % len(PALETTE)] for i, m in enumerate(modules)}
+    tag = {c.id: cycle_tag(i) for i, c in enumerate(cycles)}
+    return modules, cycles, colour, tag
 
 
 STATUS_GLYPHS = {
@@ -222,10 +249,17 @@ def board(
         except NodError as exc:
             raise typer.BadParameter(str(exc))
         items = services.items.list(project.id, module=module_obj, cycle=cycle_obj, orphaned=orphaned)
+        modules, cycles, colour, tag = placement_keys(services)
         if as_json:
+            module_slug = {m.id: m.slug for m in modules}
+            cycle_slug = {c.id: c.slug for c in cycles}
             data = {
                 status.value: [
-                    {"identifier": x.identifier, "title": x.title, "priority": x.priority.value, "estimate": x.estimate}
+                    {
+                        "identifier": x.identifier, "title": x.title, "priority": x.priority.value,
+                        "estimate": x.estimate, "module": module_slug.get(x.module_id),
+                        "cycle": cycle_slug.get(x.cycle_id),
+                    }
                     for x in items if x.status == status
                 ]
                 for status in WorkItemStatus
@@ -234,7 +268,13 @@ def board(
             return
         columns = {status: [] for status in WorkItemStatus}
         for x in items:
-            columns[x.status].append(f"{x.identifier}  {x.title}" + ("  [orphaned]" if missing_placement(x) else ""))
+            cell = Text(x.identifier, style=f"bold {colour.get(x.module_id, 'dim')}")
+            cell.append(f"  {x.title}")
+            if x.cycle_id:
+                cell.append(f"  [{tag[x.cycle_id]}]", style="bold")
+            if missing_placement(x):
+                cell.append("  [orphaned]", style="dim")
+            columns[x.status].append(cell)
         table = Table(show_header=True, header_style="bold", expand=True)
         for status in WorkItemStatus:
             table.add_column(status.value.upper(), overflow="fold")
@@ -242,6 +282,20 @@ def board(
         for i in range(height):
             table.add_row(*(columns[status][i] if i < len(columns[status]) else "" for status in WorkItemStatus))
         console.print(table)
+        # legend: only what is on the board
+        shown_modules = [m for m in modules if any(x.module_id == m.id for x in items)]
+        shown_cycles = [c for c in cycles if any(x.cycle_id == c.id for x in items)]
+        if shown_modules:
+            line = Text("Modules: ")
+            for m in shown_modules:
+                line.append("■ ", style=colour[m.id]).append(f"{m.slug}   ")
+            console.print(line)
+        if shown_cycles:
+            line = Text("Cycles:  ")
+            for c in shown_cycles:
+                dates = f" ({c.start_date or '?'} → {c.end_date or '?'})" if (c.start_date or c.end_date) else ""
+                line.append(f"[{tag[c.id]}] ", style="bold").append(f"{c.name}{dates}   ")
+            console.print(line)
     finally:
         session.close()
 
@@ -281,7 +335,7 @@ def timeline(as_json: bool = typer.Option(False, "--json")):
                     length = max((date.fromisoformat(r["end"]) - date.fromisoformat(r["start"])).days, 1)
                     bar = " " * max(offset, 0) + "█" * max(round(length / span * 30), 1)
                 else:
-                    bar = "[dim]no dates[/dim]"
+                    bar = Text("no dates", style="dim")
                 table.add_row(r["name"], f"{r['start'] or ''} → {r['end'] or ''}", bar, str(r["items"]), f"{r['estimate_h']}h")
             console.print(table)
             return
@@ -289,7 +343,7 @@ def timeline(as_json: bool = typer.Option(False, "--json")):
         for r in rows:
             table.add_row(r["name"], r["status"], str(r["items"]), f"{r['estimate_h']}h")
         console.print(table)
-        console.print("[dim]Set cycle --start/--end dates to get a chronological timeline.[/dim]")
+        console.print("Set cycle --start/--end dates to get a chronological timeline.", style="dim")
     finally:
         session.close()
 
