@@ -7,7 +7,7 @@ from rich.console import Console
 from rich.table import Table
 from sqlalchemy.exc import SQLAlchemyError
 
-from nod.application.services import Services
+from nod.application.services import Services, is_overdue
 from nod.domain.enums import ModuleStatus, Priority, WorkItemStatus, WorkItemType
 from nod.domain.errors import NodError
 from nod.infrastructure.database import create_schema, create_session_factory, db_path
@@ -145,6 +145,8 @@ def render_dependency_tree(graph) -> list[str]:
         flow = branch_flow(attrs.get("from_branch"), attrs.get("to_branch"))
         if flow:
             text += f"  ({flow})"
+        if attrs.get("due_date"):
+            text += f"  due {attrs['due_date']}" + ("  OVERDUE" if attrs.get("overdue") else "")
         return text
 
     def draw_children(node: str, prefix: str) -> None:
@@ -426,6 +428,7 @@ def task_add(
     branch: str = typer.Option(None, "--branch"),
     from_branch: str = typer.Option(None, "--from-branch", help="Branch or tag the work is cut from."),
     to_branch: str = typer.Option(None, "--to-branch", help="Branch the work merges into."),
+    due: str = typer.Option(None, "--due", help="Due date, YYYY-MM-DD."),
     as_json: bool = typer.Option(False, "--json"),
 ):
     session, project = require_project()
@@ -438,7 +441,7 @@ def task_add(
             priority=Priority(priority), module=module_obj, cycle=cycle_obj,
             estimate=_parse_hours(estimate),
             status=WorkItemStatus(status) if status else None,
-            branch=branch, from_branch=from_branch, to_branch=to_branch,
+            branch=branch, from_branch=from_branch, to_branch=to_branch, due=due,
         )
         output(result, as_json)
     except NodError as exc:
@@ -461,6 +464,7 @@ def task_set(
     branch: str = typer.Option(None, "--branch"),
     from_branch: str = typer.Option(None, "--from-branch", help="Branch or tag the work is cut from."),
     to_branch: str = typer.Option(None, "--to-branch", help="Branch the work merges into."),
+    due: str = typer.Option(None, "--due", help="Due date, YYYY-MM-DD; an empty value clears it."),
     as_json: bool = typer.Option(False, "--json"),
 ):
     session, project = require_project()
@@ -472,7 +476,7 @@ def task_set(
             identifier, title=title, description=description, append=append,
             status=status, priority=priority, module=module_obj, cycle=cycle_obj,
             branch=branch, estimate=_parse_hours(estimate),
-            from_branch=from_branch, to_branch=to_branch,
+            from_branch=from_branch, to_branch=to_branch, due=due,
         )
         output(result, as_json)
     except NodError as exc:
@@ -519,13 +523,14 @@ def task_list(
         if as_json:
             typer.echo(json.dumps([vars(x) for x in rows], default=str, indent=2))
             return
-        table = Table("ID", "Title", "Module", "Estimate", "Status", "Priority", "Branch")
+        table = Table("ID", "Title", "Module", "Estimate", "Status", "Priority", "Due", "Branch")
         modules = {m.id: m.slug for m in services.modules.list()}
         for x in rows:
             table.add_row(
                 x.identifier, x.title, modules.get(x.module_id) or "",
                 f"{x.estimate:g}h" if x.estimate else "",
                 x.status.value, x.priority.value,
+                (x.due_date or "") + ("\nOVERDUE" if is_overdue(x) else ""),
                 "\n".join(filter(None, [x.branch_name, branch_flow(x.from_branch, x.to_branch)])),
             )
         console.print(table)

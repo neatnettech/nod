@@ -72,6 +72,7 @@ class WorkItem:
     branch_name: str | None = None
     from_branch: str | None = None
     to_branch: str | None = None
+    due_date: str | None = None
     completed_at: datetime | None = None
 
 

@@ -49,6 +49,9 @@ nod init
   `--from-branch` (the branch or tag it is cut from) and `--to-branch` (where it
   merges), for example `nod task set OSS-2 --from-branch chore/ground --to-branch main`
   for a long lived branch that lands on main later
+* **Due dates** are optional per item: `--due 2026-10-16` on `task add` and `task set`
+  (an empty value clears it); an open item past its date shows as OVERDUE in
+  `nod task list` and `nod graph`
 
 ## Views
 

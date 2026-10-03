@@ -144,6 +144,7 @@ class WorkItemRepository:
             branch_name=item.branch_name,
             from_branch=item.from_branch,
             to_branch=item.to_branch,
+            due_date=item.due_date,
         ))
 
     def update(self, item: WorkItem) -> None:
@@ -162,6 +163,7 @@ class WorkItemRepository:
         row.branch_name = item.branch_name
         row.from_branch = item.from_branch
         row.to_branch = item.to_branch
+        row.due_date = item.due_date
 
     def _to_domain(self, r: WorkItemModel) -> WorkItem:
         return WorkItem(
@@ -173,6 +175,6 @@ class WorkItemRepository:
             cycle_id=_uuid(r.cycle_id) if r.cycle_id else None,
             assignee_id=_uuid(r.assignee_id) if r.assignee_id else None,
             estimate=r.estimate,
-            branch_name=r.branch_name, from_branch=r.from_branch, to_branch=r.to_branch,
+            branch_name=r.branch_name, from_branch=r.from_branch, to_branch=r.to_branch, due_date=r.due_date,
             completed_at=r.completed_at
         )

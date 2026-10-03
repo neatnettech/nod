@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+from datetime import date
 from uuid import UUID, uuid4
 
 import networkx as nx
@@ -15,8 +16,25 @@ from nod.domain.enums import (
     WorkItemType,
 )
 from nod.domain.errors import DependencyCycleError, NotFoundError, ValidationError
+
 from nod.domain.models import Cycle, Module, WorkItem
 from nod.infrastructure.models import WorkItemRelationModel
+
+
+def due_date(value: str | None) -> str | None:
+    """A due date normalized to YYYY-MM-DD; None leaves it unset, an empty string clears it."""
+    if not value:
+        return value
+    try:
+        return date.fromisoformat(value).isoformat()
+    except ValueError:
+        raise ValidationError(f"Due date must be YYYY-MM-DD, got {value!r}.") from None
+
+
+def is_overdue(item) -> bool:
+    """Past its due date and still open. Derived on read, never stored."""
+    open_ = item.status not in (WorkItemStatus.DONE, WorkItemStatus.CANCELLED)
+    return bool(item.due_date) and open_ and item.due_date < date.today().isoformat()
 
 
 def slugify(value: str) -> str:
@@ -93,7 +111,7 @@ class Services:
         self.session.commit()
         return cycle
 
-    def create_task(self, title: str, description=None, type_=WorkItemType.TASK, priority=Priority.MEDIUM, module=None, cycle=None, estimate=None, status=None, branch=None, from_branch=None, to_branch=None):
+    def create_task(self, title: str, description=None, type_=WorkItemType.TASK, priority=Priority.MEDIUM, module=None, cycle=None, estimate=None, status=None, branch=None, from_branch=None, to_branch=None, due=None):
         if not title.strip():
             raise ValidationError("Task title cannot be empty.")
         for attempt in range(5):  # ponytail: SQLite serializes writers (busy_timeout); the loser rereads max(seq)
@@ -109,6 +127,7 @@ class Services:
                 branch_name=branch,
                 from_branch=from_branch,
                 to_branch=to_branch,
+                due_date=due_date(due) or None,
             )
             self.items.add(item)
             try:
@@ -122,7 +141,7 @@ class Services:
     def update_task(
         self, identifier: str, title=None, description=None, append=None,
         status=None, priority=None, module=None, cycle=None, branch=None, estimate=None,
-        from_branch=None, to_branch=None,
+        from_branch=None, to_branch=None, due=None,
     ):
         item = self.items.get(self.project.id, identifier)
         if not item:
@@ -147,6 +166,8 @@ class Services:
             item.from_branch = from_branch
         if to_branch is not None:
             item.to_branch = to_branch
+        if due is not None:
+            item.due_date = due_date(due) or None
         if estimate is not None:
             item.estimate = estimate
         self.items.update(item)
@@ -200,6 +221,8 @@ class Services:
                 branch=item.branch_name,
                 from_branch=item.from_branch,
                 to_branch=item.to_branch,
+                due_date=item.due_date,
+                overdue=is_overdue(item),
                 module=modules.get(item.module_id),
             )
         rows = self.session.scalars(select(WorkItemRelationModel)).all()

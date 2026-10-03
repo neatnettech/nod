@@ -54,6 +54,7 @@ def create_session_factory(db: Path):
 MIGRATIONS = [
     "ALTER TABLE work_items ADD COLUMN from_branch VARCHAR(255)",
     "ALTER TABLE work_items ADD COLUMN to_branch VARCHAR(255)",
+    "ALTER TABLE work_items ADD COLUMN due_date VARCHAR(10)",
 ]
 
 

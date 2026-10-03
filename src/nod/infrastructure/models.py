@@ -78,6 +78,7 @@ class WorkItemModel(Base):
     branch_name: Mapped[str | None] = mapped_column(String(255))
     from_branch: Mapped[str | None] = mapped_column(String(255))  # where the branch was cut from
     to_branch: Mapped[str | None] = mapped_column(String(255))    # where it merges
+    due_date: Mapped[str | None] = mapped_column(String(10))      # YYYY-MM-DD, like cycle dates
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
