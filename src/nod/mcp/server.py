@@ -43,6 +43,7 @@ def work_item_list(
     status: str | None = None,
     module: str | None = None,
     cycle: str | None = None,
+    orphaned: bool = False,
 ) -> list[dict]:
     from nod.domain.enums import WorkItemStatus
     session, svc = service()
@@ -53,6 +54,7 @@ def work_item_list(
             status=WorkItemStatus(status) if status else None,
             module=module_obj,
             cycle=cycle_obj,
+            orphaned=orphaned,
         )
         return [vars(x) for x in rows]
     finally:
@@ -129,12 +131,12 @@ def work_item_update(
 
 
 @mcp.tool()
-def board(module: str | None = None, cycle: str | None = None) -> dict:
+def board(module: str | None = None, cycle: str | None = None, orphaned: bool = False) -> dict:
     from nod.domain.enums import WorkItemStatus
     session, svc = service()
     try:
         module_obj, cycle_obj = svc.scope(module, cycle)
-        items = svc.items.list(svc.project.id, module=module_obj, cycle=cycle_obj)
+        items = svc.items.list(svc.project.id, module=module_obj, cycle=cycle_obj, orphaned=orphaned)
         return {
             status.value: [
                 {"identifier": x.identifier, "title": x.title, "priority": x.priority.value, "estimate": x.estimate}
@@ -165,10 +167,10 @@ def timeline() -> list[dict]:
 
 
 @mcp.tool()
-def dependency_graph(module: str | None = None, cycle: str | None = None) -> dict:
+def dependency_graph(module: str | None = None, cycle: str | None = None, orphaned: bool = False) -> dict:
     session, svc = service()
     try:
-        g = svc.graph(*svc.scope(module, cycle))
+        g = svc.graph(*svc.scope(module, cycle), orphaned=orphaned)
         return {
             "nodes": [{"id": n, **attrs} for n, attrs in g.nodes(data=True)],
             "edges": [{"source": s, "target": t, **attrs} for s, t, attrs in g.edges(data=True)],

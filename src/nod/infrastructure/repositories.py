@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from nod.domain.enums import (
@@ -107,7 +107,10 @@ class WorkItemRepository:
         )
         return (value or 0) + 1
 
-    def list(self, project_id: UUID, status=None, module=None, cycle=None, priority=None, type_=None) -> list[WorkItem]:
+    def list(
+        self, project_id: UUID, status=None, module=None, cycle=None, priority=None, type_=None,
+        orphaned: bool = False,
+    ) -> list[WorkItem]:
         stmt = select(WorkItemModel).where(WorkItemModel.project_id == str(project_id)).order_by(WorkItemModel.sequence_id)
         if status:
             stmt = stmt.where(WorkItemModel.status == status.value)
@@ -119,6 +122,8 @@ class WorkItemRepository:
             stmt = stmt.where(WorkItemModel.priority == priority.value)
         if type_:
             stmt = stmt.where(WorkItemModel.type == type_.value)
+        if orphaned:  # not yet placed: no module, or not in any cycle
+            stmt = stmt.where(or_(WorkItemModel.module_id.is_(None), WorkItemModel.cycle_id.is_(None)))
         rows = self.session.scalars(stmt).all()
         return [self._to_domain(r) for r in rows]
 

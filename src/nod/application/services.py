@@ -37,6 +37,11 @@ def is_overdue(item) -> bool:
     return bool(item.due_date) and open_ and item.due_date < date.today().isoformat()
 
 
+def missing_placement(item) -> list[str]:
+    """What an orphaned item lacks: its module, its cycle, or both. Empty when placed."""
+    return [name for name, ref in (("module", item.module_id), ("cycle", item.cycle_id)) if ref is None]
+
+
 def slugify(value: str) -> str:
     value = value.strip().lower()
     value = re.sub(r"[^a-z0-9]+", "-", value)
@@ -217,7 +222,7 @@ class Services:
             raise NotFoundError(f"Cycle not found: {cycle}")
         return module_obj, cycle_obj
 
-    def graph(self, module=None, cycle=None):
+    def graph(self, module=None, cycle=None, orphaned: bool = False):
         """Dependency graph of the items in scope (a resolved module and/or cycle). A
         prerequisite outside the scope is not drawn; the item lists it under
         ``needs_outside`` so a blocker in another release or area stays visible."""
@@ -237,6 +242,7 @@ class Services:
                 to_branch=item.to_branch,
                 due_date=item.due_date,
                 overdue=is_overdue(item),
+                missing=missing_placement(item),
                 module=modules.get(item.module_id),
             )
         rows = self.session.scalars(select(WorkItemRelationModel)).all()
@@ -245,9 +251,9 @@ class Services:
             target = self.session.get(WorkItemModel, row.target_work_item_id)
             if source and target:
                 graph.add_edge(source.identifier, target.identifier, relation=row.relation_type)
-        if module is None and cycle is None:
+        if module is None and cycle is None and not orphaned:
             return graph
-        keep = {i.identifier for i in self.items.list(self.project.id, module=module, cycle=cycle)}
+        keep = {i.identifier for i in self.items.list(self.project.id, module=module, cycle=cycle, orphaned=orphaned)}
         for n in keep:
             # depends_on points at the prerequisite, blocks points away from it
             needs = [v for v in graph.successors(n) if graph.edges[n, v].get("relation") == "depends_on"]

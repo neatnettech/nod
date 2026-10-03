@@ -64,6 +64,11 @@ nod timeline                     # cycles over time with estimates
 nod graph                        # ASCII dependency diagram
 ```
 
+`board`, `graph` and `task list` cut by area or release with `--module <slug>` and
+`--cycle <slug>` (an unknown slug is an error). A filtered graph still names the
+prerequisites it does not draw (`needs NOD-7 outside this view`). Items not yet
+placed in a module or a cycle are flagged ORPHANED, and `--orphaned` shows only them.
+
 The dependency graph renders as a tree of prerequisite arrows with status
 glyphs and branch names:
 

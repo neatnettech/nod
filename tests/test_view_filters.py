@@ -71,3 +71,26 @@ def test_an_unknown_slug_is_an_error_everywhere(tmp_path):
         assert expected in (result.stderr + result.stdout).replace("\n", " "), args
     # the typo did not create an unassigned item
     assert len(json.loads(run("task", "list", "--json", cwd=root).stdout)) == 3
+
+
+def test_items_without_a_module_or_a_cycle_are_orphaned(tmp_path):
+    root = project(tmp_path)
+    run("task", "add", "Loose", cwd=root)                       # NOD-4: no module, no cycle
+    run("task", "add", "Unplanned", "--module", "m1", cwd=root)  # NOD-5: no cycle
+
+    listed = json.loads(run("task", "list", "--orphaned", "--json", cwd=root).stdout)
+    assert [x["identifier"] for x in listed] == ["NOD-4", "NOD-5"]
+    in_m1 = json.loads(run("task", "list", "--module", "m1", "--orphaned", "--json", cwd=root).stdout)
+    assert [x["identifier"] for x in in_m1] == ["NOD-5"]
+
+    board = json.loads(run("board", "--orphaned", "--json", cwd=root).stdout)
+    assert [x["identifier"] for x in board["todo"]] == ["NOD-4", "NOD-5"]
+
+    nodes, _ = graph_json(root, "--orphaned")
+    assert set(nodes) == {"NOD-4", "NOD-5"}
+    assert nodes["NOD-4"]["missing"] == ["module", "cycle"] and nodes["NOD-5"]["missing"] == ["cycle"]
+
+    # the unfiltered views flag them too
+    graph = run("graph", cwd=root).stdout.replace("\n", " ")
+    assert "ORPHANED: no module, no cycle" in graph and "ORPHANED: no cycle" in graph
+    assert run("task", "list", cwd=root).stdout.count("ORPHANED") == 2

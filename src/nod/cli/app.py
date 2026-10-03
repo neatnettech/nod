@@ -7,7 +7,7 @@ from rich.console import Console
 from rich.table import Table
 from sqlalchemy.exc import SQLAlchemyError
 
-from nod.application.services import Services, is_overdue
+from nod.application.services import Services, is_overdue, missing_placement
 from nod.domain.enums import ModuleStatus, Priority, WorkItemStatus, WorkItemType
 from nod.domain.errors import NodError
 from nod.infrastructure.database import create_schema, create_session_factory, db_path
@@ -145,6 +145,8 @@ def render_dependency_tree(graph) -> list[str]:
         flow = branch_flow(attrs.get("from_branch"), attrs.get("to_branch"))
         if flow:
             text += f"  ({flow})"
+        if attrs.get("missing"):
+            text += "  ORPHANED: " + ", ".join(f"no {m}" for m in attrs["missing"])
         if attrs.get("needs_outside"):
             text += f"  (needs {', '.join(attrs['needs_outside'])} outside this view)"
         if attrs.get("due_date"):
@@ -177,6 +179,7 @@ def render_dependency_tree(graph) -> list[str]:
 def graph(
     module: str = typer.Option(None, "--module"),
     cycle: str = typer.Option(None, "--cycle"),
+    orphaned: bool = typer.Option(False, "--orphaned", help="Only items missing a module or a cycle."),
     as_json: bool = typer.Option(False, "--json"),
 ):
     """Graph of work item dependencies, optionally for one module and/or cycle."""
@@ -184,7 +187,7 @@ def graph(
     try:
         services = Services(session, project)
         try:
-            g = services.graph(*services.scope(module, cycle))
+            g = services.graph(*services.scope(module, cycle), orphaned=orphaned)
         except NodError as exc:
             raise typer.BadParameter(str(exc))
         if as_json:
@@ -207,6 +210,7 @@ def graph(
 def board(
     module: str = typer.Option(None, "--module"),
     cycle: str = typer.Option(None, "--cycle"),
+    orphaned: bool = typer.Option(False, "--orphaned", help="Only items missing a module or a cycle."),
     as_json: bool = typer.Option(False, "--json"),
 ):
     """Kanban board of work items grouped by status."""
@@ -217,7 +221,7 @@ def board(
             module_obj, cycle_obj = services.scope(module, cycle)
         except NodError as exc:
             raise typer.BadParameter(str(exc))
-        items = services.items.list(project.id, module=module_obj, cycle=cycle_obj)
+        items = services.items.list(project.id, module=module_obj, cycle=cycle_obj, orphaned=orphaned)
         if as_json:
             data = {
                 status.value: [
@@ -230,7 +234,7 @@ def board(
             return
         columns = {status: [] for status in WorkItemStatus}
         for x in items:
-            columns[x.status].append(f"{x.identifier}  {x.title}")
+            columns[x.status].append(f"{x.identifier}  {x.title}" + ("  [orphaned]" if missing_placement(x) else ""))
         table = Table(show_header=True, header_style="bold", expand=True)
         for status in WorkItemStatus:
             table.add_column(status.value.upper(), overflow="fold")
@@ -515,6 +519,7 @@ def task_list(
     cycle: str = typer.Option(None, "--cycle"),
     priority: str = typer.Option(None, "--priority"),
     type_: str = typer.Option(None, "--type"),
+    orphaned: bool = typer.Option(False, "--orphaned", help="Only items missing a module or a cycle."),
     as_json: bool = typer.Option(False, "--json"),
 ):
     session, project = require_project()
@@ -531,6 +536,7 @@ def task_list(
             cycle=cycle_obj,
             priority=Priority(priority) if priority else None,
             type_=WorkItemType(type_) if type_ else None,
+            orphaned=orphaned,
         )
         if as_json:
             typer.echo(json.dumps([vars(x) for x in rows], default=str, indent=2))
@@ -539,7 +545,9 @@ def task_list(
         modules = {m.id: m.slug for m in services.modules.list()}
         for x in rows:
             table.add_row(
-                x.identifier, x.title, modules.get(x.module_id) or "",
+                x.identifier,
+                x.title + ("\nORPHANED: " + ", ".join(f"no {m}" for m in missing_placement(x)) if missing_placement(x) else ""),
+                modules.get(x.module_id) or "",
                 f"{x.estimate:g}h" if x.estimate else "",
                 x.status.value, x.priority.value,
                 (x.due_date or "") + ("\nOVERDUE" if is_overdue(x) else ""),
