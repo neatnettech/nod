@@ -31,7 +31,7 @@ def project(tmp_path: Path) -> Path:
 def test_items_carry_a_cycle_letter_and_the_legend_explains_them(tmp_path):
     out = run("board", cwd=project(tmp_path)).stdout
     # cycles are lettered in date order: c2 starts first
-    assert "NOD-1  Alpha  [B]" in out and "NOD-2  Beta  [A]" in out
+    assert "[B] NOD-1  Alpha" in out and "[A] NOD-2  Beta" in out
     assert "NOD-3  [Epic] Loose  [orphaned]" in out
     assert "Modules: ■ m1   ■ m2" in out
     assert "Cycles:  [A] c2 (2026-09-01 → 2026-09-30)   [B] c1 (2026-10-01 → ?)" in out

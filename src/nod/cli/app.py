@@ -268,10 +268,11 @@ def board(
             return
         columns = {status: [] for status in WorkItemStatus}
         for x in items:
-            cell = Text(x.identifier, style=f"bold {colour.get(x.module_id, 'dim')}")
-            cell.append(f"  {x.title}")
+            cell = Text()
             if x.cycle_id:
-                cell.append(f"  [{tag[x.cycle_id]}]", style="bold")
+                cell.append(f"[{tag[x.cycle_id]}] ", style="bold")
+            cell.append(x.identifier, style=f"bold {colour.get(x.module_id, 'dim')}")
+            cell.append(f"  {x.title}")
             if missing_placement(x):
                 cell.append("  [orphaned]", style="dim")
             columns[x.status].append(cell)
