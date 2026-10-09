@@ -128,6 +128,7 @@ STATUS_GLYPHS = {
     "backlog": "· BACKLOG",
     "todo": "○ TODO",
     "in_progress": "◐ IN_PROGRESS",
+    "hold": "⏸ HOLD",
     "done": "✓ DONE",
     "cancelled": "✗ CANCELLED",
 }
