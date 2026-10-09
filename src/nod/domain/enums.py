@@ -12,6 +12,7 @@ class WorkItemStatus(StrEnum):
     BACKLOG = "backlog"
     TODO = "todo"
     IN_PROGRESS = "in_progress"
+    HOLD = "hold"
     DONE = "done"
     CANCELLED = "cancelled"
 
