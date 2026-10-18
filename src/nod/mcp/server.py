@@ -115,6 +115,7 @@ def work_item_update(
     from_branch: str | None = None,
     to_branch: str | None = None,
     due: str | None = None,
+    completed_at: str | None = None,
 ) -> dict:
     session, svc = service()
     try:
@@ -124,6 +125,7 @@ def work_item_update(
             append=description_append, status=status, priority=priority,
             module=module_obj, cycle=cycle_obj, branch=branch,
             from_branch=from_branch, to_branch=to_branch, due=due,
+            completed=completed_at,
         )
         return vars(item)
     finally:

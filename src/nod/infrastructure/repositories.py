@@ -1,3 +1,4 @@
+from datetime import timezone
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
@@ -150,6 +151,7 @@ class WorkItemRepository:
             from_branch=item.from_branch,
             to_branch=item.to_branch,
             due_date=item.due_date,
+            completed_at=item.completed_at,
         ))
 
     def update(self, item: WorkItem) -> None:
@@ -169,6 +171,7 @@ class WorkItemRepository:
         row.from_branch = item.from_branch
         row.to_branch = item.to_branch
         row.due_date = item.due_date
+        row.completed_at = item.completed_at
 
     def _to_domain(self, r: WorkItemModel) -> WorkItem:
         return WorkItem(
@@ -181,5 +184,6 @@ class WorkItemRepository:
             assignee_id=_uuid(r.assignee_id) if r.assignee_id else None,
             estimate=r.estimate,
             branch_name=r.branch_name, from_branch=r.from_branch, to_branch=r.to_branch, due_date=r.due_date,
-            completed_at=r.completed_at
+            # SQLite hands DateTime(timezone=True) back naive; it was written as UTC
+            completed_at=r.completed_at and r.completed_at.replace(tzinfo=timezone.utc),
         )
