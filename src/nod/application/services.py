@@ -1,6 +1,6 @@
 from pathlib import Path
 import re
-from datetime import date
+from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
 
 import networkx as nx
@@ -29,6 +29,16 @@ def due_date(value: str | None) -> str | None:
         return date.fromisoformat(value).isoformat()
     except ValueError:
         raise ValidationError(f"Due date must be YYYY-MM-DD, got {value!r}.") from None
+
+
+def completed_at(value: str | None) -> datetime | None:
+    """A completion timestamp parsed from an ISO 8601 string; an empty string clears it."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise ValidationError(f"Completed at must be an ISO 8601 datetime, got {value!r}.") from None
 
 
 def is_overdue(item) -> bool:
@@ -133,6 +143,7 @@ class Services:
                 from_branch=from_branch,
                 to_branch=to_branch,
                 due_date=due_date(due) or None,
+                completed_at=datetime.now(timezone.utc) if status == WorkItemStatus.DONE else None,
             )
             self.items.add(item)
             try:
@@ -146,7 +157,7 @@ class Services:
     def update_task(
         self, identifier: str, title=None, description=None, append=None,
         status=None, priority=None, module=None, cycle=None, branch=None, estimate=None,
-        from_branch=None, to_branch=None, due=None,
+        from_branch=None, to_branch=None, due=None, completed=None,
     ):
         item = self.items.get(self.project.id, identifier)
         if not item:
@@ -159,6 +170,10 @@ class Services:
             item.description = ((item.description or "").rstrip() + "\n\n" + append.strip()).strip()
         if status is not None:
             item.status = WorkItemStatus(status)
+            if item.status is not WorkItemStatus.DONE:
+                item.completed_at = None
+            elif item.completed_at is None:
+                item.completed_at = datetime.now(timezone.utc)
         if priority is not None:
             item.priority = Priority(priority)
         if module is not None:
@@ -173,6 +188,8 @@ class Services:
             item.to_branch = to_branch
         if due is not None:
             item.due_date = due_date(due) or None
+        if completed is not None:
+            item.completed_at = completed_at(completed)
         if estimate is not None:
             item.estimate = estimate
         self.items.update(item)

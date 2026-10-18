@@ -61,3 +61,24 @@ def test_a_database_from_the_branch_flow_release_gains_due_dates(tmp_path):
     assert con.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS) == 3
     assert "due_date" in {row[1] for row in con.execute("PRAGMA table_info(work_items)")}
     con.close()
+
+
+def test_done_stamps_completed_at_and_reopening_clears_it(tmp_path):
+    root = repo(tmp_path)
+    item = json.loads(run("task", "add", "Ship it", "--json", cwd=root).stdout)
+    assert item["completed_at"] is None
+    done = json.loads(run("task", "set", item["identifier"], "--status", "done", "--json", cwd=root).stdout)
+    assert done["completed_at"]
+    again = json.loads(run("task", "set", item["identifier"], "--status", "done", "--json", cwd=root).stdout)
+    assert again["completed_at"] == done["completed_at"], "re-marking done keeps the first stamp"
+    reopened = json.loads(run("task", "set", item["identifier"], "--status", "todo", "--json", cwd=root).stdout)
+    assert reopened["completed_at"] is None
+
+
+def test_completed_at_can_be_set_and_cleared_explicitly(tmp_path):
+    root = repo(tmp_path)
+    item = json.loads(run("task", "add", "Backdate me", "--json", cwd=root).stdout)
+    stamped = json.loads(run("task", "set", item["identifier"], "--completed-at", "2026-10-10T12:30:00", "--json", cwd=root).stdout)
+    assert stamped["completed_at"].startswith("2026-10-10")
+    cleared = json.loads(run("task", "set", item["identifier"], "--completed-at", "", "--json", cwd=root).stdout)
+    assert cleared["completed_at"] is None
