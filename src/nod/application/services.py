@@ -126,7 +126,7 @@ class Services:
         self.session.commit()
         return cycle
 
-    def create_task(self, title: str, description=None, type_=WorkItemType.TASK, priority=Priority.MEDIUM, module=None, cycle=None, estimate=None, status=None, branch=None, from_branch=None, to_branch=None, due=None):
+    def create_task(self, title: str, description=None, type_=WorkItemType.TASK, priority=Priority.MEDIUM, module=None, cycle=None, estimate=None, status=None, branch=None, from_branch=None, to_branch=None, due=None, plan=None, memory=None):
         if not title.strip():
             raise ValidationError("Task title cannot be empty.")
         for attempt in range(5):  # ponytail: SQLite serializes writers (busy_timeout); the loser rereads max(seq)
@@ -144,6 +144,8 @@ class Services:
                 to_branch=to_branch,
                 due_date=due_date(due) or None,
                 completed_at=datetime.now(timezone.utc) if status == WorkItemStatus.DONE else None,
+                plan_path=plan or None,
+                memory_path=memory or None,
             )
             self.items.add(item)
             try:
@@ -157,7 +159,7 @@ class Services:
     def update_task(
         self, identifier: str, title=None, description=None, append=None,
         status=None, priority=None, module=None, cycle=None, branch=None, estimate=None,
-        from_branch=None, to_branch=None, due=None, completed=None,
+        from_branch=None, to_branch=None, due=None, completed=None, plan=None, memory=None,
     ):
         item = self.items.get(self.project.id, identifier)
         if not item:
@@ -190,6 +192,10 @@ class Services:
             item.due_date = due_date(due) or None
         if completed is not None:
             item.completed_at = completed_at(completed)
+        if plan is not None:
+            item.plan_path = plan or None
+        if memory is not None:
+            item.memory_path = memory or None
         if estimate is not None:
             item.estimate = estimate
         self.items.update(item)

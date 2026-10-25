@@ -74,6 +74,8 @@ class WorkItem:
     to_branch: str | None = None
     due_date: str | None = None
     completed_at: datetime | None = None
+    plan_path: str | None = None
+    memory_path: str | None = None
 
 
 @dataclass

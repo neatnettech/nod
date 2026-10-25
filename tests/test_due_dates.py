@@ -58,7 +58,7 @@ def test_a_database_from_the_branch_flow_release_gains_due_dates(tmp_path):
     create_session_factory(db)
 
     con = sqlite3.connect(db)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS) == 3
+    assert con.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
     assert "due_date" in {row[1] for row in con.execute("PRAGMA table_info(work_items)")}
     con.close()
 

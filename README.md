@@ -52,6 +52,9 @@ nod init
 * **Due dates** are optional per item: `--due 2026-10-16` on `task add` and `task set`
   (an empty value clears it); an open item past its date shows as OVERDUE in
   `nod task list` and `nod graph`
+* **Agent context** points an item at the plan and memory files an LLM wrote for it:
+  `nod task set NOD-3 --plan ~/.claude/plans/x.md --memory .claude/memory/nod.md`
+  (an empty value clears it), so a fresh session can pick the work back up
 
 ## Views
 

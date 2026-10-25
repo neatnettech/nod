@@ -152,6 +152,8 @@ class WorkItemRepository:
             to_branch=item.to_branch,
             due_date=item.due_date,
             completed_at=item.completed_at,
+            plan_path=item.plan_path,
+            memory_path=item.memory_path,
         ))
 
     def update(self, item: WorkItem) -> None:
@@ -172,6 +174,8 @@ class WorkItemRepository:
         row.to_branch = item.to_branch
         row.due_date = item.due_date
         row.completed_at = item.completed_at
+        row.plan_path = item.plan_path
+        row.memory_path = item.memory_path
 
     def _to_domain(self, r: WorkItemModel) -> WorkItem:
         return WorkItem(
@@ -186,4 +190,5 @@ class WorkItemRepository:
             branch_name=r.branch_name, from_branch=r.from_branch, to_branch=r.to_branch, due_date=r.due_date,
             # SQLite hands DateTime(timezone=True) back naive; it was written as UTC
             completed_at=r.completed_at and r.completed_at.replace(tzinfo=timezone.utc),
+            plan_path=r.plan_path, memory_path=r.memory_path,
         )
