@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"python3 - <<'EOF'\\nfrom pathlib import Path\\ndef sub(path, old, new):\\n    p = Path(path); s = p.read_text()\\n    assert s.count(old) == 1, (path, old, s.count(old))\\n    p.write_text(s.re...",
-  "error": "Exit code 1\n README.md                              |  3 +++\n src/nod/application/services.py        | 10 ++++++++--\n src/nod/cli/app.py                     |  7 ++++++-\n src/nod/domain/models.py               |  2 ++\n src/nod/infrastructure/database.py     |  2 ++\n src/nod/infrastructure/models.py       |  2 ++\n src/nod/infrastructure/repositories.py |  5 +++++\n src/nod/mcp/server.py                  |  7 ++++++-\n tests/test_due_dates.py                |  2 +-\n 9 files changed, 35 insertions(+)...",
-  "timestamp": "2026-10-25T14:29:45.631Z",
-  "retry_count": 2
-}
