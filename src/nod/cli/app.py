@@ -501,6 +501,8 @@ def task_add(
     from_branch: str = typer.Option(None, "--from-branch", help="Branch or tag the work is cut from."),
     to_branch: str = typer.Option(None, "--to-branch", help="Branch the work merges into."),
     due: str = typer.Option(None, "--due", help="Due date, YYYY-MM-DD."),
+    plan: str = typer.Option(None, "--plan", help="Path to an agent's plan file for this item."),
+    memory: str = typer.Option(None, "--memory", help="Path to an agent's memory file for this item."),
     as_json: bool = typer.Option(False, "--json"),
 ):
     session, project = require_project()
@@ -513,6 +515,7 @@ def task_add(
             estimate=_parse_hours(estimate),
             status=WorkItemStatus(status) if status else None,
             branch=branch, from_branch=from_branch, to_branch=to_branch, due=due,
+            plan=plan, memory=memory,
         )
         output(result, as_json)
     except NodError as exc:
@@ -537,6 +540,8 @@ def task_set(
     to_branch: str = typer.Option(None, "--to-branch", help="Branch the work merges into."),
     due: str = typer.Option(None, "--due", help="Due date, YYYY-MM-DD; an empty value clears it."),
     completed_at: str = typer.Option(None, "--completed-at", help="Completion timestamp, ISO 8601; an empty value clears it."),
+    plan: str = typer.Option(None, "--plan", help="Path to an agent's plan file; an empty value clears it."),
+    memory: str = typer.Option(None, "--memory", help="Path to an agent's memory file; an empty value clears it."),
     as_json: bool = typer.Option(False, "--json"),
 ):
     session, project = require_project()
@@ -548,7 +553,7 @@ def task_set(
             status=status, priority=priority, module=module_obj, cycle=cycle_obj,
             branch=branch, estimate=_parse_hours(estimate),
             from_branch=from_branch, to_branch=to_branch, due=due,
-            completed=completed_at,
+            completed=completed_at, plan=plan, memory=memory,
         )
         output(result, as_json)
     except NodError as exc:

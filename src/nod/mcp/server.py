@@ -86,6 +86,8 @@ def work_item_create(
     from_branch: str | None = None,
     to_branch: str | None = None,
     due: str | None = None,
+    plan_path: str | None = None,
+    memory_path: str | None = None,
 ) -> dict:
     from nod.domain.enums import WorkItemType, Priority
     session, svc = service()
@@ -95,6 +97,7 @@ def work_item_create(
             title, description=description, type_=WorkItemType(type),
             priority=Priority(priority), module=module_obj, cycle=cycle_obj,
             estimate=estimate, branch=branch, from_branch=from_branch, to_branch=to_branch, due=due,
+            plan=plan_path, memory=memory_path,
         )
         return vars(item)
     finally:
@@ -116,6 +119,8 @@ def work_item_update(
     to_branch: str | None = None,
     due: str | None = None,
     completed_at: str | None = None,
+    plan_path: str | None = None,
+    memory_path: str | None = None,
 ) -> dict:
     session, svc = service()
     try:
@@ -125,7 +130,7 @@ def work_item_update(
             append=description_append, status=status, priority=priority,
             module=module_obj, cycle=cycle_obj, branch=branch,
             from_branch=from_branch, to_branch=to_branch, due=due,
-            completed=completed_at,
+            completed=completed_at, plan=plan_path, memory=memory_path,
         )
         return vars(item)
     finally:
