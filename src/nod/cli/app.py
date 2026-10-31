@@ -470,6 +470,31 @@ def cycle_show(ref: str = typer.Argument(...), as_json: bool = typer.Option(Fals
         session.close()
 
 
+@cycle_app.command("report")
+def cycle_report(
+    ref: str = typer.Argument(...),
+    out: Path = typer.Option(None, "--out", help="Output file, default <cycle-slug>.html."),
+    open_: bool = typer.Option(False, "--open", help="Open the report in the browser."),
+):
+    """Printable HTML sprint report for one cycle."""
+    from nod.cli.report import render_cycle
+    session, project = require_project()
+    try:
+        services = Services(session, project)
+        cycle = services.cycles.get(ref)
+        if not cycle:
+            raise typer.BadParameter(f"Cycle not found: {ref}")
+        items = services.items.list(project.id, cycle=cycle)
+        path = out or Path(f"{cycle.slug}.html")
+        path.write_text(render_cycle(project, cycle, items, services.modules.list()), encoding="utf-8")
+        console.print("Wrote", path, style="green")
+        if open_:
+            import webbrowser
+            webbrowser.open(path.resolve().as_uri())
+    finally:
+        session.close()
+
+
 @cycle_app.command("list")
 def cycle_list(as_json: bool = typer.Option(False, "--json")):
     session, project = require_project()

@@ -64,6 +64,7 @@ nod module list                  # modules
 nod cycle list                   # cycles
 nod board                        # kanban grouped by status
 nod timeline                     # cycles over time with estimates
+nod cycle report sprint-1 --open # printable HTML sprint report (--out path)
 nod graph                        # ASCII dependency diagram
 ```
 
