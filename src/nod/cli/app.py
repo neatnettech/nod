@@ -254,12 +254,14 @@ def board(
         if as_json:
             module_slug = {m.id: m.slug for m in modules}
             cycle_slug = {c.id: c.slug for c in cycles}
+            ident = {x.id: x.identifier for x in services.items.list(project.id)}
             data = {
                 status.value: [
                     {
                         "identifier": x.identifier, "title": x.title, "priority": x.priority.value,
                         "estimate": x.estimate, "module": module_slug.get(x.module_id),
                         "cycle": cycle_slug.get(x.cycle_id),
+                        "parent": ident.get(x.parent_id),
                     }
                     for x in items if x.status == status
                 ]
@@ -528,6 +530,7 @@ def task_add(
     due: str = typer.Option(None, "--due", help="Due date, YYYY-MM-DD."),
     plan: str = typer.Option(None, "--plan", help="Path to an agent's plan file for this item."),
     memory: str = typer.Option(None, "--memory", help="Path to an agent's memory file for this item."),
+    parent: str = typer.Option(None, "--parent", help="Epic this item belongs to, e.g. OSS-110."),
     as_json: bool = typer.Option(False, "--json"),
 ):
     session, project = require_project()
@@ -540,7 +543,7 @@ def task_add(
             estimate=_parse_hours(estimate),
             status=WorkItemStatus(status) if status else None,
             branch=branch, from_branch=from_branch, to_branch=to_branch, due=due,
-            plan=plan, memory=memory,
+            plan=plan, memory=memory, parent=services.parent(parent),
         )
         output(result, as_json)
     except NodError as exc:
@@ -567,11 +570,15 @@ def task_set(
     completed_at: str = typer.Option(None, "--completed-at", help="Completion timestamp, ISO 8601; an empty value clears it."),
     plan: str = typer.Option(None, "--plan", help="Path to an agent's plan file; an empty value clears it."),
     memory: str = typer.Option(None, "--memory", help="Path to an agent's memory file; an empty value clears it."),
+    parent: str = typer.Option(None, "--parent", help="Epic this item belongs to, e.g. OSS-110."),
+    no_parent: bool = typer.Option(False, "--no-parent", help="Detach the item from its epic."),
     as_json: bool = typer.Option(False, "--json"),
 ):
     session, project = require_project()
     try:
         services = Services(session, project)
+        if parent and no_parent:
+            raise typer.BadParameter("Use either --parent or --no-parent, not both.")
         module_obj, cycle_obj = services.scope(module, cycle)
         result = services.update_task(
             identifier, title=title, description=description, append=append,
@@ -579,6 +586,7 @@ def task_set(
             branch=branch, estimate=_parse_hours(estimate),
             from_branch=from_branch, to_branch=to_branch, due=due,
             completed=completed_at, plan=plan, memory=memory,
+            parent=services.parent(parent), clear_parent=no_parent,
         )
         output(result, as_json)
     except NodError as exc:
@@ -595,7 +603,24 @@ def task_show(identifier: str = typer.Argument(...), as_json: bool = typer.Optio
         result = services.items.get(project.id, identifier)
         if not result:
             raise typer.BadParameter(f"Work item not found: {identifier}")
-        output(result, as_json)
+        parent_obj = services.items.get_by_id(result.parent_id) if result.parent_id else None
+        kids = services.children(result)
+        if as_json:
+            data = {k: v if isinstance(v, (str, int, float, bool, type(None))) else str(v) for k, v in vars(result).items()}
+            data["parent"] = parent_obj.identifier if parent_obj else None
+            data["children"] = [
+                {"identifier": k.identifier, "title": k.title, "status": k.status.value} for k in kids
+            ]
+            typer.echo(json.dumps(data, indent=2))
+            return
+        console.print(result)
+        if parent_obj:
+            console.print(f"Parent: {parent_obj.identifier}  {parent_obj.title}")
+        if kids:
+            table = Table("Child", "Title", "Status", title=f"Children of {result.identifier}")
+            for k in kids:
+                table.add_row(k.identifier, k.title, k.status.value)
+            console.print(table)
     finally:
         session.close()
 
@@ -608,6 +633,7 @@ def task_list(
     priority: str = typer.Option(None, "--priority"),
     type_: str = typer.Option(None, "--type"),
     orphaned: bool = typer.Option(False, "--orphaned", help="Only items missing a module or a cycle."),
+    parent: str = typer.Option(None, "--parent", help="Only children of this epic, e.g. OSS-110."),
     as_json: bool = typer.Option(False, "--json"),
 ):
     session, project = require_project()
@@ -615,6 +641,7 @@ def task_list(
         services = Services(session, project)
         try:
             module_obj, cycle_obj = services.scope(module, cycle)
+            parent_obj = services.parent(parent)
         except NodError as exc:
             raise typer.BadParameter(str(exc))
         rows = services.items.list(
@@ -625,6 +652,7 @@ def task_list(
             priority=Priority(priority) if priority else None,
             type_=WorkItemType(type_) if type_ else None,
             orphaned=orphaned,
+            parent=parent_obj,
         )
         if as_json:
             typer.echo(json.dumps([vars(x) for x in rows], default=str, indent=2))

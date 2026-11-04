@@ -110,7 +110,7 @@ class WorkItemRepository:
 
     def list(
         self, project_id: UUID, status=None, module=None, cycle=None, priority=None, type_=None,
-        orphaned: bool = False,
+        orphaned: bool = False, parent=None,
     ) -> list[WorkItem]:
         stmt = select(WorkItemModel).where(WorkItemModel.project_id == str(project_id)).order_by(WorkItemModel.sequence_id)
         if status:
@@ -123,6 +123,8 @@ class WorkItemRepository:
             stmt = stmt.where(WorkItemModel.priority == priority.value)
         if type_:
             stmt = stmt.where(WorkItemModel.type == type_.value)
+        if parent:
+            stmt = stmt.where(WorkItemModel.parent_id == str(parent.id))
         if orphaned:  # not yet placed: no module, or not in any cycle
             stmt = stmt.where(or_(WorkItemModel.module_id.is_(None), WorkItemModel.cycle_id.is_(None)))
         rows = self.session.scalars(stmt).all()
@@ -135,6 +137,10 @@ class WorkItemRepository:
                 WorkItemModel.identifier == identifier.upper(),
             )
         )
+        return self._to_domain(row) if row else None
+
+    def get_by_id(self, id: UUID) -> WorkItem | None:
+        row = self.session.get(WorkItemModel, str(id))
         return self._to_domain(row) if row else None
 
     def add(self, item: WorkItem) -> None:
@@ -165,6 +171,7 @@ class WorkItemRepository:
         row.type = item.type.value
         row.status = item.status.value
         row.priority = item.priority.value
+        row.parent_id = str(item.parent_id) if item.parent_id else None
         row.module_id = str(item.module_id) if item.module_id else None
         row.cycle_id = str(item.cycle_id) if item.cycle_id else None
         row.assignee_id = str(item.assignee_id) if item.assignee_id else None
