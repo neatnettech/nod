@@ -126,7 +126,7 @@ class Services:
         self.session.commit()
         return cycle
 
-    def create_task(self, title: str, description=None, type_=WorkItemType.TASK, priority=Priority.MEDIUM, module=None, cycle=None, estimate=None, status=None, branch=None, from_branch=None, to_branch=None, due=None, plan=None, memory=None):
+    def create_task(self, title: str, description=None, type_=WorkItemType.TASK, priority=Priority.MEDIUM, module=None, cycle=None, estimate=None, status=None, branch=None, from_branch=None, to_branch=None, due=None, plan=None, memory=None, parent=None):
         if not title.strip():
             raise ValidationError("Task title cannot be empty.")
         for attempt in range(5):  # ponytail: SQLite serializes writers (busy_timeout); the loser rereads max(seq)
@@ -137,6 +137,7 @@ class Services:
                 description=description, type=type_, priority=priority,
                 module_id=module.id if module else None,
                 cycle_id=cycle.id if cycle else None,
+                parent_id=parent.id if parent else None,
                 estimate=estimate,
                 status=status or WorkItemStatus.TODO,
                 branch_name=branch,
@@ -160,6 +161,7 @@ class Services:
         self, identifier: str, title=None, description=None, append=None,
         status=None, priority=None, module=None, cycle=None, branch=None, estimate=None,
         from_branch=None, to_branch=None, due=None, completed=None, plan=None, memory=None,
+        parent=None, clear_parent: bool = False,
     ):
         item = self.items.get(self.project.id, identifier)
         if not item:
@@ -182,6 +184,11 @@ class Services:
             item.module_id = module.id
         if cycle is not None:
             item.cycle_id = cycle.id
+        if parent is not None:
+            self._check_parent(item, parent)
+            item.parent_id = parent.id
+        elif clear_parent:
+            item.parent_id = None
         if branch is not None:
             item.branch_name = branch
         if from_branch is not None:
@@ -245,6 +252,27 @@ class Services:
             raise NotFoundError(f"Cycle not found: {cycle}")
         return module_obj, cycle_obj
 
+    def parent(self, ref: str | None):
+        """Resolve a parent identifier (an epic). Unknown or non-epic is an error."""
+        if not ref:
+            return None
+        obj = self.items.get(self.project.id, ref)
+        if obj is None:
+            raise NotFoundError(f"Parent not found: {ref}")
+        if obj.type is not WorkItemType.EPIC:
+            raise ValidationError(f"Parent {obj.identifier} is a {obj.type.value}, not an epic.")
+        return obj
+
+    def _check_parent(self, item, parent) -> None:
+        node = parent
+        while node is not None:  # self parent and loops: item must not be on the parent's ancestor chain
+            if node.id == item.id:
+                raise ValidationError(f"{item.identifier} cannot be its own ancestor.")
+            node = self.items.get_by_id(node.parent_id) if node.parent_id else None
+
+    def children(self, item):
+        return self.items.list(self.project.id, parent=item)
+
     def graph(self, module=None, cycle=None, orphaned: bool = False):
         """Dependency graph of the items in scope (a resolved module and/or cycle). A
         prerequisite outside the scope is not drawn; the item lists it under
@@ -253,6 +281,7 @@ class Services:
         graph = nx.DiGraph()
         items = self.items.list(self.project.id)
         modules = {m.id: m.slug for m in self.modules.list()}
+        idents = {i.id: i.identifier for i in items}
         for item in items:
             graph.add_node(
                 item.identifier,
@@ -267,6 +296,7 @@ class Services:
                 overdue=is_overdue(item),
                 missing=missing_placement(item),
                 module=modules.get(item.module_id),
+                parent=idents.get(item.parent_id),
             )
         rows = self.session.scalars(select(WorkItemRelationModel)).all()
         for row in rows:

@@ -44,6 +44,7 @@ def work_item_list(
     module: str | None = None,
     cycle: str | None = None,
     orphaned: bool = False,
+    parent: str | None = None,
 ) -> list[dict]:
     from nod.domain.enums import WorkItemStatus
     session, svc = service()
@@ -55,6 +56,7 @@ def work_item_list(
             module=module_obj,
             cycle=cycle_obj,
             orphaned=orphaned,
+            parent=svc.parent(parent),
         )
         return [vars(x) for x in rows]
     finally:
@@ -68,7 +70,15 @@ def work_item_get(identifier: str) -> dict:
         item = svc.items.get(svc.project.id, identifier)
         if not item:
             raise ValueError(f"Work Item not found: {identifier}")
-        return vars(item)
+        parent = svc.items.get_by_id(item.parent_id) if item.parent_id else None
+        return {
+            **vars(item),
+            "parent": parent.identifier if parent else None,
+            "children": [
+                {"identifier": c.identifier, "title": c.title, "status": c.status.value}
+                for c in svc.children(item)
+            ],
+        }
     finally:
         session.close()
 
@@ -88,6 +98,7 @@ def work_item_create(
     due: str | None = None,
     plan_path: str | None = None,
     memory_path: str | None = None,
+    parent: str | None = None,
 ) -> dict:
     from nod.domain.enums import WorkItemType, Priority
     session, svc = service()
@@ -97,7 +108,7 @@ def work_item_create(
             title, description=description, type_=WorkItemType(type),
             priority=Priority(priority), module=module_obj, cycle=cycle_obj,
             estimate=estimate, branch=branch, from_branch=from_branch, to_branch=to_branch, due=due,
-            plan=plan_path, memory=memory_path,
+            plan=plan_path, memory=memory_path, parent=svc.parent(parent),
         )
         return vars(item)
     finally:
@@ -121,7 +132,9 @@ def work_item_update(
     completed_at: str | None = None,
     plan_path: str | None = None,
     memory_path: str | None = None,
+    parent: str | None = None,
 ) -> dict:
+    """parent: epic identifier to attach to; an empty string detaches."""
     session, svc = service()
     try:
         module_obj, cycle_obj = svc.scope(module, cycle)
@@ -131,6 +144,7 @@ def work_item_update(
             module=module_obj, cycle=cycle_obj, branch=branch,
             from_branch=from_branch, to_branch=to_branch, due=due,
             completed=completed_at, plan=plan_path, memory=memory_path,
+            parent=svc.parent(parent), clear_parent=parent == "",
         )
         return vars(item)
     finally:
@@ -146,12 +160,14 @@ def board(module: str | None = None, cycle: str | None = None, orphaned: bool = 
         items = svc.items.list(svc.project.id, module=module_obj, cycle=cycle_obj, orphaned=orphaned)
         module_slug = {m.id: m.slug for m in svc.modules.list()}
         cycle_slug = {c.id: c.slug for c in svc.cycles.list()}
+        ident = {x.id: x.identifier for x in svc.items.list(svc.project.id)}
         return {
             status.value: [
                 {
                     "identifier": x.identifier, "title": x.title, "priority": x.priority.value,
                     "estimate": x.estimate, "module": module_slug.get(x.module_id),
                     "cycle": cycle_slug.get(x.cycle_id),
+                    "parent": ident.get(x.parent_id),
                 }
                 for x in items if x.status == status
             ]

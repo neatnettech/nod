@@ -44,6 +44,10 @@ nod init
 * **Cycles** are timeboxed plans: `nod cycle add "Sprint 1" --start 2026-10-01 --end 2026-10-14`
 * **Work items** are epics, stories, tasks, and bugs:
   `nod task add "Seed categories" --module vault --cycle sprint-1 --estimate 2h`
+* **Epics** group work that ships together: `nod task add "Slice" --parent OSS-110`
+  or `nod task set OSS-133 --parent OSS-110` (`--no-parent` detaches). The parent must be
+  an epic, never the item itself, never a loop. `nod task list --parent OSS-110` lists the
+  children and `nod task show OSS-110` shows them. Closing an epic leaves children alone.
 * **Dependencies** order the work: `nod depends OSS-2 OSS-1`
 * **Branch flow** says where the work lives and goes: `--branch` plus optional
   `--from-branch` (the branch or tag it is cut from) and `--to-branch` (where it
@@ -92,7 +96,9 @@ Every view accepts `--json` for scripting and agents.
 ## Agents
 
 `nod-mcp` exposes the same state as MCP tools: work item create/update/list,
-project info, the board, the timeline, and the dependency graph. Point your
+project info, the board, the timeline, and the dependency graph. Work item
+create/update take a `parent` epic (an empty value detaches), list filters by it,
+and get returns the item's `children`. Point your
 MCP client at `nod-mcp` from inside the repository.
 
 ## Development
