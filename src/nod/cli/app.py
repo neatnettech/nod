@@ -98,6 +98,33 @@ def depends(source: str, target: str):
         session.close()
 
 
+@app.command()
+def serve(
+    cycle: str = typer.Argument(None, help="Cycle to mark as current; default is the active one, else the one running today."),
+    port: int = typer.Option(8765, "--port"),
+    open_: bool = typer.Option(False, "--open", help="Open the page in the browser."),
+):
+    """Serve a live, read only dashboard on localhost: in progress now, cycles, items per cycle."""
+    from nod.cli.live import make_server
+    session, _ = require_project()
+    session.close()
+    try:
+        server = make_server(create_session_factory(db_path()), port, cycle)
+    except OSError as exc:
+        raise typer.BadParameter(f"Cannot listen on port {port}: {exc}")
+    url = f"http://127.0.0.1:{server.server_port}/"
+    console.print("Serving", url, "(Ctrl C to stop)", style="green")
+    if open_:
+        import webbrowser
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+
 PALETTE = (
     "cyan", "magenta", "green", "yellow", "blue", "red",
     "bright_cyan", "bright_magenta", "bright_green", "bright_yellow", "bright_blue", "bright_red",
@@ -567,6 +594,7 @@ def task_set(
     from_branch: str = typer.Option(None, "--from-branch", help="Branch or tag the work is cut from."),
     to_branch: str = typer.Option(None, "--to-branch", help="Branch the work merges into."),
     due: str = typer.Option(None, "--due", help="Due date, YYYY-MM-DD; an empty value clears it."),
+    started_at: str = typer.Option(None, "--started-at", help="Start timestamp, ISO 8601; an empty value clears it."),
     completed_at: str = typer.Option(None, "--completed-at", help="Completion timestamp, ISO 8601; an empty value clears it."),
     plan: str = typer.Option(None, "--plan", help="Path to an agent's plan file; an empty value clears it."),
     memory: str = typer.Option(None, "--memory", help="Path to an agent's memory file; an empty value clears it."),
@@ -585,7 +613,7 @@ def task_set(
             status=status, priority=priority, module=module_obj, cycle=cycle_obj,
             branch=branch, estimate=_parse_hours(estimate),
             from_branch=from_branch, to_branch=to_branch, due=due,
-            completed=completed_at, plan=plan, memory=memory,
+            started=started_at, completed=completed_at, plan=plan, memory=memory,
             parent=services.parent(parent), clear_parent=no_parent,
         )
         output(result, as_json)

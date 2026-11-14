@@ -133,8 +133,10 @@ def work_item_update(
     plan_path: str | None = None,
     memory_path: str | None = None,
     parent: str | None = None,
+    started_at: str | None = None,
 ) -> dict:
-    """parent: epic identifier to attach to; an empty string detaches."""
+    """parent: epic identifier to attach to; an empty string detaches.
+    started_at is stamped on the first move to in_progress, completed_at on done; pass ISO 8601 to backdate, an empty string to clear."""
     session, svc = service()
     try:
         module_obj, cycle_obj = svc.scope(module, cycle)
@@ -143,7 +145,7 @@ def work_item_update(
             append=description_append, status=status, priority=priority,
             module=module_obj, cycle=cycle_obj, branch=branch,
             from_branch=from_branch, to_branch=to_branch, due=due,
-            completed=completed_at, plan=plan_path, memory=memory_path,
+            started=started_at, completed=completed_at, plan=plan_path, memory=memory_path,
             parent=svc.parent(parent), clear_parent=parent == "",
         )
         return vars(item)

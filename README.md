@@ -56,6 +56,11 @@ nod init
 * **Due dates** are optional per item: `--due 2026-10-16` on `task add` and `task set`
   (an empty value clears it); an open item past its date shows as OVERDUE in
   `nod task list` and `nod graph`
+* **Timestamps** are kept per item: `created_at`, `started_at` (stamped on the first
+  move to `in_progress`; hold, resume and reopen keep it) and `completed_at` (stamped on
+  `done`). `--started-at` and `--completed-at` on `task set` take ISO 8601 to backdate,
+  an empty value to clear. Cycle time is completed minus started; an item that never
+  recorded a start stays out of the averages
 * **Agent context** points an item at the plan and memory files an LLM wrote for it:
   `nod task set NOD-3 --plan ~/.claude/plans/x.md --memory .claude/memory/nod.md`
   (an empty value clears it), so a fresh session can pick the work back up
@@ -69,6 +74,7 @@ nod cycle list                   # cycles
 nod board                        # kanban grouped by status
 nod timeline                     # cycles over time with estimates
 nod cycle report sprint-1 --open # printable HTML sprint report (--out path)
+nod serve --open                 # live dashboard: in progress now, cycles, items per cycle
 nod graph                        # ASCII dependency diagram
 ```
 
@@ -80,6 +86,15 @@ placed in a module or a cycle are flagged ORPHANED, and `--orphaned` shows only 
 On the board each item's ID takes its module's colour and its title ends with its
 cycle's letter (`[A]`, `[B]`, in date order); a legend under the board explains the
 colours and letters shown. `nod board --json` names each item's module and cycle.
+
+`nod serve --port 8765` is optional: a read only dashboard on localhost that reloads
+itself as humans and agents move work. It shows what is in progress right now (with
+branch and plan), every cycle with its progress, and the items of each open cycle by
+status. Each cycle links to its full report at `/cycle/<slug>`; items in no cycle live
+at `/unplanned`. Every item is clickable and opens `/item/<identifier>`: its facts,
+description, epic, children and dependencies. Cycles and the header show the average
+cycle time, in progress cards the time work started. The current cycle is the active one, else the one whose dates include
+today; `nod serve <slug>` picks it by hand.
 
 The dependency graph renders as a tree of prerequisite arrows with status
 glyphs and branch names:
@@ -107,6 +122,12 @@ MCP client at `nod-mcp` from inside the repository.
 pip install -e ".[dev]"
 pytest
 ```
+
+To watch the dashboard move, `python scripts/sandbox.py` builds a throwaway project in
+`tmp/sandbox` (modules, three cycles, an epic, dependencies), serves it, opens the
+browser and plays a scripted sprint: two agents picking up work, a blocked item, the
+cycle rolling over. `--step 1` plays faster, `--seed-only` leaves the moves to you or
+to an agent started inside `tmp/sandbox`.
 
 Schema changes ship as append only `MIGRATIONS` in
 `src/nod/infrastructure/database.py`, tracked by SQLite's `user_version`, so an

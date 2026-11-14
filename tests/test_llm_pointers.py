@@ -44,6 +44,6 @@ def test_a_database_from_the_due_date_release_gains_agent_paths(tmp_path):
     create_session_factory(db)
 
     con = sqlite3.connect(db)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS) == 5
+    assert con.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
     assert {"plan_path", "memory_path"} <= {row[1] for row in con.execute("PRAGMA table_info(work_items)")}
     con.close()

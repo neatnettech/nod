@@ -31,14 +31,15 @@ def due_date(value: str | None) -> str | None:
         raise ValidationError(f"Due date must be YYYY-MM-DD, got {value!r}.") from None
 
 
-def completed_at(value: str | None) -> datetime | None:
-    """A completion timestamp parsed from an ISO 8601 string; an empty string clears it."""
+def timestamp(value: str | None, label: str = "Completed at") -> datetime | None:
+    """A timestamp parsed from an ISO 8601 string, read as UTC when it names no zone; an empty string clears it."""
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value)
+        parsed = datetime.fromisoformat(value)
     except ValueError:
-        raise ValidationError(f"Completed at must be an ISO 8601 datetime, got {value!r}.") from None
+        raise ValidationError(f"{label} must be an ISO 8601 datetime, got {value!r}.") from None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def is_overdue(item) -> bool:
@@ -144,6 +145,7 @@ class Services:
                 from_branch=from_branch,
                 to_branch=to_branch,
                 due_date=due_date(due) or None,
+                started_at=datetime.now(timezone.utc) if status == WorkItemStatus.IN_PROGRESS else None,
                 completed_at=datetime.now(timezone.utc) if status == WorkItemStatus.DONE else None,
                 plan_path=plan or None,
                 memory_path=memory or None,
@@ -161,7 +163,7 @@ class Services:
         self, identifier: str, title=None, description=None, append=None,
         status=None, priority=None, module=None, cycle=None, branch=None, estimate=None,
         from_branch=None, to_branch=None, due=None, completed=None, plan=None, memory=None,
-        parent=None, clear_parent: bool = False,
+        parent=None, clear_parent: bool = False, started=None,
     ):
         item = self.items.get(self.project.id, identifier)
         if not item:
@@ -174,6 +176,9 @@ class Services:
             item.description = ((item.description or "").rstrip() + "\n\n" + append.strip()).strip()
         if status is not None:
             item.status = WorkItemStatus(status)
+            # the first start sticks: hold, resume and reopen do not move it
+            if item.status is WorkItemStatus.IN_PROGRESS and item.started_at is None:
+                item.started_at = datetime.now(timezone.utc)
             if item.status is not WorkItemStatus.DONE:
                 item.completed_at = None
             elif item.completed_at is None:
@@ -197,8 +202,10 @@ class Services:
             item.to_branch = to_branch
         if due is not None:
             item.due_date = due_date(due) or None
+        if started is not None:
+            item.started_at = timestamp(started, "Started at")
         if completed is not None:
-            item.completed_at = completed_at(completed)
+            item.completed_at = timestamp(completed)
         if plan is not None:
             item.plan_path = plan or None
         if memory is not None:

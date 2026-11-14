@@ -73,6 +73,8 @@ class WorkItem:
     from_branch: str | None = None
     to_branch: str | None = None
     due_date: str | None = None
+    created_at: datetime | None = None
+    started_at: datetime | None = None
     completed_at: datetime | None = None
     plan_path: str | None = None
     memory_path: str | None = None
