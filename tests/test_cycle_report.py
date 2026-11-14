@@ -5,7 +5,8 @@ def test_cycle_report_writes_escaped_html(tmp_path):
     root = setup(tmp_path)
     run("module", "add", "Vault", cwd=root)
     run("cycle", "add", "Sprint 1", "--start", "2026-10-01", "--end", "2026-10-14", cwd=root)
-    run("task", "add", "Note editor", "--module", "vault", "--cycle", "sprint-1", "--estimate", "3h", "--status", "done", cwd=root)
+    run("task", "add", "Note editor", "--module", "vault", "--cycle", "sprint-1", "--estimate", "3h", "--status", "in_progress", cwd=root)
+    run("task", "set", "NOD-1", "--status", "done", cwd=root)
     run("task", "add", "<script>alert(1)</script>", "--module", "vault", "--cycle", "sprint-1", "--estimate", "1h", cwd=root)
 
     result = run("cycle", "report", "sprint-1", "--out", "r.html", cwd=root)

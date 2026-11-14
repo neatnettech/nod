@@ -73,9 +73,21 @@ class WorkItem:
     from_branch: str | None = None
     to_branch: str | None = None
     due_date: str | None = None
+    created_at: datetime | None = None
+    started_at: datetime | None = None
     completed_at: datetime | None = None
     plan_path: str | None = None
     memory_path: str | None = None
+
+
+@dataclass
+class StatusChange:
+    """One recorded move of a work item; from_status is None for the status it was created with."""
+    id: str
+    identifier: str
+    from_status: str | None
+    to_status: str
+    at: datetime
 
 
 @dataclass

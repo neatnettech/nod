@@ -83,6 +83,7 @@ class WorkItemModel(Base):
     memory_path: Mapped[str | None] = mapped_column(Text)         # where an agent's memory of it lives
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))    # first move to in progress
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 

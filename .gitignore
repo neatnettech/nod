@@ -8,3 +8,4 @@ dist/
 build/
 uv.lock
 .omc/
+tmp/

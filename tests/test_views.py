@@ -68,6 +68,7 @@ def test_dependency_graph(tmp_path):
     run("task", "add", "First", cwd=root)
     run("task", "add", "Second", cwd=root)
     run("task", "add", "Third", cwd=root)
+    run("task", "set", "NOD-1", "--status", "in_progress", cwd=root)
     assert run("task", "set", "NOD-1", "--status", "done", "--branch", "feat/first", cwd=root).returncode == 0
     assert run("depends", "NOD-2", "NOD-1", cwd=root).returncode == 0
     assert run("depends", "NOD-3", "NOD-1", cwd=root).returncode == 0

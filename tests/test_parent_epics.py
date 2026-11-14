@@ -68,6 +68,7 @@ def test_list_filter_and_show_children(tmp_path):
 def test_closing_the_parent_leaves_children_attached(tmp_path):
     root = project(tmp_path)
     run("task", "set", "NOD-3", "--parent", "NOD-1", cwd=root)
+    run("task", "set", "NOD-1", "--status", "in_progress", cwd=root)
     assert run("task", "set", "NOD-1", "--status", "done", cwd=root).returncode == 0
     child = show(root, "NOD-3")
     assert child["parent"] == "NOD-1" and child["status"] == "todo"

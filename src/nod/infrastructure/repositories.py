@@ -157,6 +157,7 @@ class WorkItemRepository:
             from_branch=item.from_branch,
             to_branch=item.to_branch,
             due_date=item.due_date,
+            started_at=item.started_at,
             completed_at=item.completed_at,
             plan_path=item.plan_path,
             memory_path=item.memory_path,
@@ -180,6 +181,7 @@ class WorkItemRepository:
         row.from_branch = item.from_branch
         row.to_branch = item.to_branch
         row.due_date = item.due_date
+        row.started_at = item.started_at
         row.completed_at = item.completed_at
         row.plan_path = item.plan_path
         row.memory_path = item.memory_path
@@ -196,6 +198,8 @@ class WorkItemRepository:
             estimate=r.estimate,
             branch_name=r.branch_name, from_branch=r.from_branch, to_branch=r.to_branch, due_date=r.due_date,
             # SQLite hands DateTime(timezone=True) back naive; it was written as UTC
+            created_at=r.created_at and r.created_at.replace(tzinfo=timezone.utc),
+            started_at=r.started_at and r.started_at.replace(tzinfo=timezone.utc),
             completed_at=r.completed_at and r.completed_at.replace(tzinfo=timezone.utc),
             plan_path=r.plan_path, memory_path=r.memory_path,
         )
