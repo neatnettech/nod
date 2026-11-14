@@ -78,6 +78,7 @@ def work_item_get(identifier: str) -> dict:
                 {"identifier": c.identifier, "title": c.title, "status": c.status.value}
                 for c in svc.children(item)
             ],
+            "history": [{"from": c.from_status, "to": c.to_status, "at": str(c.at)} for c in svc.history(item)],
         }
     finally:
         session.close()
@@ -99,7 +100,9 @@ def work_item_create(
     plan_path: str | None = None,
     memory_path: str | None = None,
     parent: str | None = None,
+    status: str | None = None,
 ) -> dict:
+    """status: backlog, todo (default) or in_progress. Use in_progress when you start the work right away."""
     from nod.domain.enums import WorkItemType, Priority
     session, svc = service()
     try:
@@ -108,7 +111,7 @@ def work_item_create(
             title, description=description, type_=WorkItemType(type),
             priority=Priority(priority), module=module_obj, cycle=cycle_obj,
             estimate=estimate, branch=branch, from_branch=from_branch, to_branch=to_branch, due=due,
-            plan=plan_path, memory=memory_path, parent=svc.parent(parent),
+            plan=plan_path, memory=memory_path, parent=svc.parent(parent), status=status,
         )
         return vars(item)
     finally:
@@ -136,6 +139,9 @@ def work_item_update(
     started_at: str | None = None,
 ) -> dict:
     """parent: epic identifier to attach to; an empty string detaches.
+    status moves one step at a time: backlog > todo > in_progress > done. hold (blocked) is entered from and left to
+    in_progress; in_progress and hold can go back to todo; done reopens to in_progress or todo; cancelled is
+    reachable from any open status. A refused move names the statuses that are allowed next.
     started_at is stamped on the first move to in_progress, completed_at on done; pass ISO 8601 to backdate, an empty string to clear."""
     session, svc = service()
     try:

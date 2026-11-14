@@ -17,6 +17,21 @@ class WorkItemStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+# The only moves a work item may make. Stages run in order (backlog, todo, in progress, done);
+# hold is the blocked side step, cancelled the way out, and each has a way back.
+_S = WorkItemStatus
+TRANSITIONS: dict[WorkItemStatus, frozenset[WorkItemStatus]] = {
+    _S.BACKLOG: frozenset({_S.TODO, _S.CANCELLED}),
+    _S.TODO: frozenset({_S.IN_PROGRESS, _S.BACKLOG, _S.CANCELLED}),
+    _S.IN_PROGRESS: frozenset({_S.HOLD, _S.DONE, _S.TODO, _S.CANCELLED}),
+    _S.HOLD: frozenset({_S.IN_PROGRESS, _S.TODO, _S.CANCELLED}),
+    _S.DONE: frozenset({_S.IN_PROGRESS, _S.TODO}),
+    _S.CANCELLED: frozenset({_S.BACKLOG, _S.TODO}),
+}
+# A new item cannot be born finished or blocked: there would be no start to measure from.
+INITIAL_STATUSES = frozenset({_S.BACKLOG, _S.TODO, _S.IN_PROGRESS})
+
+
 class Priority(StrEnum):
     NO_PRIORITY = "no_priority"
     URGENT = "urgent"

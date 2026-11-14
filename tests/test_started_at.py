@@ -32,13 +32,11 @@ def test_first_start_is_stamped_and_sticks(tmp_path):
 
     born = json.loads(run("task", "add", "Already going", "--status", "in_progress", "--json", cwd=root).stdout)
     assert born["started_at"]
-    skipped = json.loads(run("task", "add", "Never started", "--status", "done", "--json", cwd=root).stdout)
-    assert skipped["started_at"] is None, "an unknown start stays unknown"
 
 
 def test_started_at_can_be_backdated_and_cleared(tmp_path):
     root = repo(tmp_path)
-    ident = json.loads(run("task", "add", "Backdate me", "--json", cwd=root).stdout)["identifier"]
+    ident = json.loads(run("task", "add", "Backdate me", "--status", "in_progress", "--json", cwd=root).stdout)["identifier"]
     assert set_(root, ident, "--started-at", "2026-10-10T09:00:00")["started_at"].startswith("2026-10-10 09:00")
     assert set_(root, ident, "--started-at", "")["started_at"] is None
     bad = run("task", "set", ident, "--started-at", "yesterday", cwd=root)
@@ -49,9 +47,10 @@ def test_dashboard_shows_average_cycle_time(tmp_path):
     root = repo(tmp_path)
     run("cycle", "add", "Sprint 1", cwd=root)
     for hours in (2, 4):  # average 3h
-        ident = json.loads(run("task", "add", f"Took {hours}h", "--cycle", "sprint-1", "--status", "done", "--json", cwd=root).stdout)["identifier"]
+        ident = json.loads(run("task", "add", f"Took {hours}h", "--cycle", "sprint-1", "--status", "in_progress", "--json", cwd=root).stdout)["identifier"]
+        set_(root, ident, "--status", "done")
         set_(root, ident, "--started-at", "2026-10-10T09:00:00", "--completed-at", f"2026-10-10T{9 + hours}:00:00")
-    run("task", "add", "No start recorded", "--cycle", "sprint-1", "--status", "done", cwd=root)
+    run("task", "add", "Not done yet", "--cycle", "sprint-1", "--status", "in_progress", cwd=root)
 
     server = make_server(create_session_factory(root / ".nod" / "nod.db"), port=0)
     threading.Thread(target=server.serve_forever, daemon=True).start()

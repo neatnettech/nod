@@ -56,11 +56,24 @@ nod init
 * **Due dates** are optional per item: `--due 2026-10-16` on `task add` and `task set`
   (an empty value clears it); an open item past its date shows as OVERDUE in
   `nod task list` and `nod graph`
-* **Timestamps** are kept per item: `created_at`, `started_at` (stamped on the first
-  move to `in_progress`; hold, resume and reopen keep it) and `completed_at` (stamped on
-  `done`). `--started-at` and `--completed-at` on `task set` take ISO 8601 to backdate,
-  an empty value to clear. Cycle time is completed minus started; an item that never
-  recorded a start stays out of the averages
+* **Statuses** move one step at a time: `backlog` > `todo` > `in_progress` > `done`.
+  `hold` is the blocked side step, entered from and left to `in_progress`. Work can be
+  handed back (`in_progress` or `hold` to `todo`, `todo` to `backlog`), a `done` item
+  reopens to `in_progress` or `todo`, and `cancelled` is reachable from any open status
+  and revives to `backlog` or `todo`. A skipped stage is refused with the statuses that
+  are allowed next. A new item starts as `backlog`, `todo` or `in_progress`
+* **Timestamps** are UTC and follow the moves: `created_at`, `started_at` (the first move
+  to `in_progress`; hold, resume and reopen keep it, handing the item back clears it)
+  and `completed_at` (set on `done`, cleared on reopen). `--started-at` and
+  `--completed-at` on `task set` take ISO 8601 to backdate (another zone is converted
+  to UTC, an empty value clears) and must fit the stage: no start before the item has
+  started, no completion unless it is done, never a completion before the start. Cycle
+  time is completed minus started. Dates such as due and overdue use the UTC day too
+* **Status history** records every move (from, to, when) in the same commit as the move.
+  `nod task show` lists it, `--json` and the MCP get tool return it as `history`. It
+  gives the time each finished stage took, so time on hold is told apart from time in
+  progress. Backdating `--started-at` or `--completed-at` does not rewrite the history,
+  and items that moved before the history existed have none
 * **Agent context** points an item at the plan and memory files an LLM wrote for it:
   `nod task set NOD-3 --plan ~/.claude/plans/x.md --memory .claude/memory/nod.md`
   (an empty value clears it), so a fresh session can pick the work back up
@@ -93,7 +106,9 @@ branch and plan), every cycle with its progress, and the items of each open cycl
 status. Each cycle links to its full report at `/cycle/<slug>`; items in no cycle live
 at `/unplanned`. Every item is clickable and opens `/item/<identifier>`: its facts,
 description, epic, children and dependencies. Cycles and the header show the average
-cycle time, in progress cards the time work started. The current cycle is the active one, else the one whose dates include
+cycle time and, from the status history, the average time actually worked (hold left
+out); in progress cards show when work started, a feed the latest moves, and an item
+page its full history with the time per stage. The current cycle is the active one, else the one whose dates include
 today; `nod serve <slug>` picks it by hand.
 
 The dependency graph renders as a tree of prerequisite arrows with status

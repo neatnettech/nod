@@ -29,7 +29,8 @@ def test_live_dashboard_follows_changes(tmp_path):
         run("cycle", "add", "Sprint 2", cwd=root)
         run("cycle", "set", "sprint-1", "--status", "active", cwd=root)
         run("task", "add", "<script>alert(1)</script>", "--module", "vault", "--cycle", "sprint-1", cwd=root)
-        run("task", "add", "Later", "--module", "vault", "--cycle", "sprint-2", "--status", "done", cwd=root)
+        run("task", "add", "Later", "--module", "vault", "--cycle", "sprint-2", "--status", "in_progress", cwd=root)
+        run("task", "set", "NOD-3", "--status", "done", cwd=root)
 
         before = get(server)[1]
         # every cycle is listed, the active one is current, unplaced items get their own row
@@ -54,7 +55,8 @@ def test_live_dashboard_follows_changes(tmp_path):
         assert get(server, "/cycle/nope")[0] == 404
 
         # every item links to its own page: facts, description, epic, children, dependencies
-        assert after.count('href="/item/NOD-2"') == 2
+        assert after.count('class="item-link" href="/item/NOD-2"') == 2
+        assert "· NOD-2 · todo → in progress</a>" in after, "the feed is the recorded history"
         run("task", "add", "Epic", "--type", "epic", "--description", "Line one\n<b>two</b>", cwd=root)
         run("task", "set", "NOD-1", "--parent", "NOD-4", cwd=root)
         run("depends", "NOD-1", "NOD-2", cwd=root)

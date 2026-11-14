@@ -81,6 +81,16 @@ class WorkItem:
 
 
 @dataclass
+class StatusChange:
+    """One recorded move of a work item; from_status is None for the status it was created with."""
+    id: str
+    identifier: str
+    from_status: str | None
+    to_status: str
+    at: datetime
+
+
+@dataclass
 class Relation:
     id: UUID
     source_work_item_id: UUID

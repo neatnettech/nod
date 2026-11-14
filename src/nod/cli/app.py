@@ -568,7 +568,7 @@ def task_add(
             title, description=description, type_=WorkItemType(type_),
             priority=Priority(priority), module=module_obj, cycle=cycle_obj,
             estimate=_parse_hours(estimate),
-            status=WorkItemStatus(status) if status else None,
+            status=status,
             branch=branch, from_branch=from_branch, to_branch=to_branch, due=due,
             plan=plan, memory=memory, parent=services.parent(parent),
         )
@@ -633,12 +633,14 @@ def task_show(identifier: str = typer.Argument(...), as_json: bool = typer.Optio
             raise typer.BadParameter(f"Work item not found: {identifier}")
         parent_obj = services.items.get_by_id(result.parent_id) if result.parent_id else None
         kids = services.children(result)
+        history = services.history(result)
         if as_json:
             data = {k: v if isinstance(v, (str, int, float, bool, type(None))) else str(v) for k, v in vars(result).items()}
             data["parent"] = parent_obj.identifier if parent_obj else None
             data["children"] = [
                 {"identifier": k.identifier, "title": k.title, "status": k.status.value} for k in kids
             ]
+            data["history"] = [{"from": c.from_status, "to": c.to_status, "at": str(c.at)} for c in history]
             typer.echo(json.dumps(data, indent=2))
             return
         console.print(result)
@@ -648,6 +650,11 @@ def task_show(identifier: str = typer.Argument(...), as_json: bool = typer.Optio
             table = Table("Child", "Title", "Status", title=f"Children of {result.identifier}")
             for k in kids:
                 table.add_row(k.identifier, k.title, k.status.value)
+            console.print(table)
+        if history:
+            table = Table("At (UTC)", "From", "To", title="Status history")
+            for c in history:
+                table.add_row(c.at.strftime("%Y-%m-%d %H:%M:%S"), c.from_status or "", c.to_status)
             console.print(table)
     finally:
         session.close()

@@ -42,6 +42,7 @@ def test_only_an_open_item_past_its_due_date_is_overdue(tmp_path):
     assert listing.count("OVERDUE") == 1
     assert "OVERDUE" in run("graph", cwd=root).stdout
 
+    run("task", "set", late["identifier"], "--status", "in_progress", cwd=root)
     run("task", "set", late["identifier"], "--status", "done", cwd=root)
     assert "OVERDUE" not in run("task", "list", cwd=root).stdout
 
@@ -67,6 +68,7 @@ def test_done_stamps_completed_at_and_reopening_clears_it(tmp_path):
     root = repo(tmp_path)
     item = json.loads(run("task", "add", "Ship it", "--json", cwd=root).stdout)
     assert item["completed_at"] is None
+    run("task", "set", item["identifier"], "--status", "in_progress", cwd=root)
     done = json.loads(run("task", "set", item["identifier"], "--status", "done", "--json", cwd=root).stdout)
     assert done["completed_at"]
     again = json.loads(run("task", "set", item["identifier"], "--status", "done", "--json", cwd=root).stdout)
@@ -77,8 +79,9 @@ def test_done_stamps_completed_at_and_reopening_clears_it(tmp_path):
 
 def test_completed_at_can_be_set_and_cleared_explicitly(tmp_path):
     root = repo(tmp_path)
-    item = json.loads(run("task", "add", "Backdate me", "--json", cwd=root).stdout)
-    stamped = json.loads(run("task", "set", item["identifier"], "--completed-at", "2026-10-10T12:30:00", "--json", cwd=root).stdout)
+    item = json.loads(run("task", "add", "Backdate me", "--status", "in_progress", "--json", cwd=root).stdout)
+    run("task", "set", item["identifier"], "--status", "done", cwd=root)
+    stamped = json.loads(run("task", "set", item["identifier"], "--started-at", "2026-10-10T09:00:00", "--completed-at", "2026-10-10T12:30:00", "--json", cwd=root).stdout)
     assert stamped["completed_at"].startswith("2026-10-10")
     cleared = json.loads(run("task", "set", item["identifier"], "--completed-at", "", "--json", cwd=root).stdout)
     assert cleared["completed_at"] is None

@@ -1,11 +1,10 @@
 """Local, read only live dashboard behind `nod serve`: `/` is the overview, `/cycle/<slug>`
 one cycle, `/unplanned` the items in no cycle, `/item/<identifier>` one work item."""
-from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote
 from uuid import uuid4
 
-from nod.application.services import Services
+from nod.application.services import Services, today
 from nod.cli.report import render_cycle, render_dashboard, render_item
 from nod.domain.enums import CycleStatus
 from nod.domain.models import Cycle
@@ -17,11 +16,11 @@ def current_cycle(services, ref: str | None = None):
     if ref:
         return services.cycles.get(ref)
     cycles = services.cycles.list()
-    today = date.today().isoformat()
+    now = today()
     open_ = [c for c in cycles if c.status in (CycleStatus.ACTIVE, CycleStatus.UPCOMING)]
     return next(
         (c for c in open_ if c.status == CycleStatus.ACTIVE),
-        next((c for c in open_ if c.start_date and c.end_date and c.start_date <= today <= c.end_date), None),
+        next((c for c in open_ if c.start_date and c.end_date and c.start_date <= now <= c.end_date), None),
     )
 
 
@@ -45,6 +44,7 @@ def item_page(services, project, item, modules) -> str:
         # depends_on points at the prerequisite, blocks points away from it
         needs=linked("depends_on", "blocks"),
         unblocks=linked("blocks", "depends_on"),
+        history=services.history(item),
     )
 
 
@@ -59,6 +59,7 @@ def make_server(factory, port: int = 8765, ref: str | None = None) -> ThreadingH
                 return render_dashboard(
                     project, services.cycles.list(), services.items.list(project.id), modules,
                     current=current_cycle(services, ref),
+                    activity=services.history(limit=8), worked=services.worked(),
                 )
             if path == "/unplanned":
                 cycle = Cycle(uuid4(), project.id, "No cycle", "unplanned", status=CycleStatus.UPCOMING)

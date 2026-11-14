@@ -15,7 +15,7 @@ import subprocess
 import sys
 import time
 import webbrowser
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 NOD = [sys.executable, "-c", "from nod.cli.app import app; app()"]
@@ -51,7 +51,7 @@ class Sandbox:
         self.nod("init", "--identifier", "DEMO", "--name", "Sandbox shop")
 
         def day(offset):
-            return (date.today() + timedelta(days=offset)).isoformat()
+            return (datetime.now(timezone.utc).date() + timedelta(days=offset)).isoformat()  # nod's clock is UTC
 
         for name in ("API", "Web", "Docs"):
             self.nod("module", "add", name)
@@ -63,7 +63,8 @@ class Sandbox:
 
         history = (("Project skeleton", "api", -20, 5), ("Product list page", "web", -18, 9), ("README and setup guide", "docs", -12, 2))
         for title, module, started, hours in history:
-            done = self.add(title, module=module, cycle="sprint-1", estimate="3h", status="done")
+            done = self.add(title, module=module, cycle="sprint-1", estimate="3h", status="in_progress")
+            self.nod("task", "set", done, "--status", "done")  # stages go in order, then the history is backdated
             self.nod("task", "set", done, "--started-at", f"{day(started)}T09:00:00",
                      "--completed-at", f"{day(started)}T{9 + hours:02d}:00:00")
 

@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import re
 from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
@@ -8,6 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from nod.domain.enums import (
+    INITIAL_STATUSES,
+    TRANSITIONS,
     CycleStatus,
     ModuleStatus,
     Priority,
@@ -17,8 +20,8 @@ from nod.domain.enums import (
 )
 from nod.domain.errors import DependencyCycleError, NotFoundError, ValidationError
 
-from nod.domain.models import Cycle, Module, WorkItem
-from nod.infrastructure.models import WorkItemRelationModel
+from nod.domain.models import Cycle, Module, StatusChange, WorkItem
+from nod.infrastructure.models import ActivityModel, WorkItemModel, WorkItemRelationModel
 
 
 def due_date(value: str | None) -> str | None:
@@ -32,20 +35,51 @@ def due_date(value: str | None) -> str | None:
 
 
 def timestamp(value: str | None, label: str = "Completed at") -> datetime | None:
-    """A timestamp parsed from an ISO 8601 string, read as UTC when it names no zone; an empty string clears it."""
+    """A UTC timestamp parsed from an ISO 8601 string: another zone is converted, no zone is read as UTC.
+    An empty string clears it."""
     if not value:
         return None
     try:
         parsed = datetime.fromisoformat(value)
     except ValueError:
         raise ValidationError(f"{label} must be an ISO 8601 datetime, got {value!r}.") from None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    # SQLite keeps the wall clock and drops the zone, so everything is normalized before it is stored
+    return parsed.astimezone(timezone.utc) if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def today() -> str:
+    """Today's date in UTC, YYYY-MM-DD. Every clock in nod is UTC, so two machines agree on what is overdue."""
+    return utcnow().date().isoformat()
+
+
+def _names(statuses) -> str:
+    return ", ".join(s.value for s in WorkItemStatus if s in statuses)
+
+
+def work_item_status(value) -> WorkItemStatus:
+    try:
+        return WorkItemStatus(value)
+    except ValueError:
+        raise ValidationError(f"Unknown status {value!r}. Use one of: {_names(WorkItemStatus)}.") from None
+
+
+def stage_seconds(changes) -> dict[str, float]:
+    """Seconds spent in each status, from one item's history in order. Only finished stays count:
+    the status the item is in now is still running."""
+    total: dict[str, float] = {}
+    for entered, left in zip(changes, changes[1:]):
+        total[entered.to_status] = total.get(entered.to_status, 0) + (left.at - entered.at).total_seconds()
+    return total
 
 
 def is_overdue(item) -> bool:
     """Past its due date and still open. Derived on read, never stored."""
     open_ = item.status not in (WorkItemStatus.DONE, WorkItemStatus.CANCELLED)
-    return bool(item.due_date) and open_ and item.due_date < date.today().isoformat()
+    return bool(item.due_date) and open_ and item.due_date < today()
 
 
 def missing_placement(item) -> list[str]:
@@ -130,6 +164,12 @@ class Services:
     def create_task(self, title: str, description=None, type_=WorkItemType.TASK, priority=Priority.MEDIUM, module=None, cycle=None, estimate=None, status=None, branch=None, from_branch=None, to_branch=None, due=None, plan=None, memory=None, parent=None):
         if not title.strip():
             raise ValidationError("Task title cannot be empty.")
+        status = work_item_status(status) if status else WorkItemStatus.TODO
+        if status not in INITIAL_STATUSES:
+            raise ValidationError(
+                f"A new item cannot start as {status.value}. Create it as {_names(INITIAL_STATUSES)} and move it from there."
+            )
+        now = utcnow()
         for attempt in range(5):  # ponytail: SQLite serializes writers (busy_timeout); the loser rereads max(seq)
             sequence = self.items.next_sequence(self.project.id)
             item = WorkItem(
@@ -140,18 +180,19 @@ class Services:
                 cycle_id=cycle.id if cycle else None,
                 parent_id=parent.id if parent else None,
                 estimate=estimate,
-                status=status or WorkItemStatus.TODO,
+                status=status,
                 branch_name=branch,
                 from_branch=from_branch,
                 to_branch=to_branch,
                 due_date=due_date(due) or None,
-                started_at=datetime.now(timezone.utc) if status == WorkItemStatus.IN_PROGRESS else None,
-                completed_at=datetime.now(timezone.utc) if status == WorkItemStatus.DONE else None,
+                started_at=now if status is WorkItemStatus.IN_PROGRESS else None,
                 plan_path=plan or None,
                 memory_path=memory or None,
             )
             self.items.add(item)
             try:
+                self.session.flush()  # the item row first: the log entry points at it
+                self._record(item, None, status, now)
                 self.session.commit()
                 return item
             except IntegrityError:
@@ -175,14 +216,7 @@ class Services:
         if append is not None:
             item.description = ((item.description or "").rstrip() + "\n\n" + append.strip()).strip()
         if status is not None:
-            item.status = WorkItemStatus(status)
-            # the first start sticks: hold, resume and reopen do not move it
-            if item.status is WorkItemStatus.IN_PROGRESS and item.started_at is None:
-                item.started_at = datetime.now(timezone.utc)
-            if item.status is not WorkItemStatus.DONE:
-                item.completed_at = None
-            elif item.completed_at is None:
-                item.completed_at = datetime.now(timezone.utc)
+            self._move(item, work_item_status(status))
         if priority is not None:
             item.priority = Priority(priority)
         if module is not None:
@@ -206,6 +240,13 @@ class Services:
             item.started_at = timestamp(started, "Started at")
         if completed is not None:
             item.completed_at = timestamp(completed)
+        if started is not None or completed is not None:  # a hand set stamp has to fit the stage the item is in
+            if item.started_at and item.status in (WorkItemStatus.BACKLOG, WorkItemStatus.TODO):
+                raise ValidationError(f"{item.identifier} is {item.status.value}: it has not started, so it cannot have a start time.")
+            if item.completed_at and item.status is not WorkItemStatus.DONE:
+                raise ValidationError(f"{item.identifier} is {item.status.value}: only a done item can have a completion time.")
+            if item.started_at and item.completed_at and item.completed_at < item.started_at:
+                raise ValidationError("Completed at cannot be before started at.")
         if plan is not None:
             item.plan_path = plan or None
         if memory is not None:
@@ -215,6 +256,62 @@ class Services:
         self.items.update(item)
         self.session.commit()
         return item
+
+    def _move(self, item, new: WorkItemStatus) -> None:
+        """Apply one allowed status change and the timestamps that follow from it. The same status is a no op."""
+        if new is item.status:
+            return
+        if new not in TRANSITIONS[item.status]:
+            raise ValidationError(
+                f"{item.identifier} cannot go from {item.status.value} to {new.value}. "
+                f"From {item.status.value} it can go to: {_names(TRANSITIONS[item.status])}."
+            )
+        now = utcnow()
+        self._record(item, item.status, new, now)
+        item.status = new
+        if new is WorkItemStatus.IN_PROGRESS:
+            item.started_at = item.started_at or now  # hold, resume and reopen keep the first start
+        elif new in (WorkItemStatus.TODO, WorkItemStatus.BACKLOG):
+            item.started_at = None  # handed back: it is not started any more
+        item.completed_at = now if new is WorkItemStatus.DONE else None
+
+    def _record(self, item, old, new, at) -> None:
+        """Append one status change to the activity log. Written in the same commit as the change itself."""
+        self.session.add(ActivityModel(
+            project_id=str(self.project.id), work_item_id=str(item.id), event_type="status",
+            payload=json.dumps({"from": old.value if old else None, "to": new.value}), created_at=at,
+        ))
+
+    def history(self, item=None, limit: int | None = None) -> list[StatusChange]:
+        """Recorded status changes, oldest first: of one item, or of the whole project.
+        limit keeps the most recent ones. Items that moved before the log existed have no entries."""
+        stmt = (
+            select(ActivityModel, WorkItemModel.identifier)
+            .join(WorkItemModel, WorkItemModel.id == ActivityModel.work_item_id)
+            .where(ActivityModel.project_id == str(self.project.id), ActivityModel.event_type == "status")
+            .order_by(ActivityModel.created_at.desc(), ActivityModel.id)
+        )
+        if item is not None:
+            stmt = stmt.where(ActivityModel.work_item_id == str(item.id))
+        if limit:
+            stmt = stmt.limit(limit)
+        changes = []
+        for row, identifier in self.session.execute(stmt).all():
+            payload = json.loads(row.payload)
+            # SQLite hands DateTime(timezone=True) back naive; it was written as UTC
+            changes.append(StatusChange(row.id, identifier, payload["from"], payload["to"], row.created_at.replace(tzinfo=timezone.utc)))
+        return changes[::-1]
+
+    def worked(self) -> dict[str, float]:
+        """Seconds each item spent in progress, by identifier: hold and waiting time left out."""
+        by_item: dict[str, list[StatusChange]] = {}
+        for change in self.history():
+            by_item.setdefault(change.identifier, []).append(change)
+        return {
+            identifier: seconds
+            for identifier, changes in by_item.items()
+            if (seconds := stage_seconds(changes).get(WorkItemStatus.IN_PROGRESS.value))
+        }
 
     def add_dependency(self, source: str, target: str):
         source_item = self.items.get(self.project.id, source)

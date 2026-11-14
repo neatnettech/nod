@@ -1,9 +1,9 @@
 """Self contained, printable HTML sprint report for one cycle: summary, breakdown, cuttable task cards."""
-from datetime import date
+from datetime import timezone
 from html import escape
 from urllib.parse import quote
 
-from nod.application.services import is_overdue
+from nod.application.services import is_overdue, stage_seconds, today
 from nod.domain.enums import CycleStatus, Priority, WorkItemStatus
 
 PRIORITY_ORDER = list(Priority)
@@ -96,10 +96,10 @@ footer { margin-top: 40px; color: var(--muted); font-size: 11px; text-transform:
 #live.off { background: var(--ink); color: #fff; }
 #live.off i { background: #fff; animation: none; }
 #feed { position: fixed; bottom: 12px; right: 16px; z-index: 2; width: 330px; font-size: 11px; }
-#feed div { border: 1.5px solid var(--ink); background: #fff; padding: 4px 9px; margin-top: -1.5px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: slide .35s ease-out; }
-#feed div:first-child { background: var(--accent-soft); font-weight: 700; }
-@keyframes slide { from { transform: translateX(24px); opacity: 0; } }
+#feed a { display: block; border: 1.5px solid var(--ink); background: #fff; padding: 4px 9px; margin-top: -1.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
+#feed a:first-child { background: var(--accent-soft); font-weight: 700; }
+#feed a:hover { background: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
   *, ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }
@@ -132,9 +132,9 @@ def _meters(rows: list[tuple[str, int, float]], highlight: str | None) -> str:
 
 # ponytail: refetches the whole page every 1.5s and swaps it in when it changed; switch to SSE if this ever gets heavy.
 # Items carry a view-transition-name, so the browser animates each one from its old place to its new one.
-LIVE_SCRIPT = """<div id="live"><i></i><span>live</span></div><div id="feed"></div>
+LIVE_SCRIPT = """<div id="live"><i></i><span>live</span></div>
 <script>
-const badge = document.getElementById("live"), feed = document.getElementById("feed");
+const badge = document.getElementById("live");
 const states = () => new Map([...document.querySelectorAll("[data-id]")].map(e => [e.dataset.id, e.dataset.status]));
 const online = on => { badge.className = on ? "" : "off"; badge.lastChild.textContent = on ? "live" : "offline"; };
 let seen;
@@ -148,16 +148,9 @@ setInterval(async () => {
       const next = new DOMParser().parseFromString(text, "text/html"), before = states();
       const swap = () => { document.querySelector(".page").replaceWith(next.querySelector(".page")); document.title = next.title; };
       if (document.startViewTransition) await document.startViewTransition(swap).updateCallbackDone; else swap();
-      const time = new Date().toLocaleTimeString();
-      for (const [id, status] of states()) {
-        const was = before.get(id);
-        if (was === status) continue;
-        document.querySelectorAll(`[data-id="${CSS.escape(id)}"]`).forEach(e => e.classList.add("changed"));
-        const row = document.createElement("div");
-        row.textContent = `${time}  ${id}  ${was ? was + " → " : "new, "}${status}`.replaceAll("_", " ");
-        feed.prepend(row);
-        while (feed.children.length > 8) feed.lastChild.remove();
-      }
+      for (const [id, status] of states())
+        if (before.get(id) !== status)
+          document.querySelectorAll(`[data-id="${CSS.escape(id)}"]`).forEach(e => e.classList.add("changed"));
     }
     seen = text;
   } catch { online(false); }
@@ -182,19 +175,26 @@ def _span(seconds: float) -> str:
     return f"{round(seconds)}s"
 
 
-def _cycle_time(items) -> str:
-    """Average time from first start to completion, over the items that recorded both; empty when none did."""
-    spans = [
-        (x.completed_at - x.started_at).total_seconds()
-        for x in items if x.started_at and x.completed_at and x.completed_at >= x.started_at
-    ]
-    return f"avg {_span(sum(spans) / len(spans))} over {len(spans)}" if spans else ""
+def _cycle_time(items, worked=None) -> str:
+    """Average time from first start to completion, over the items that recorded both; empty when none did.
+    worked (seconds in progress by identifier, from the status history) adds the average without hold time."""
+    done = [x for x in items if x.started_at and x.completed_at and x.completed_at >= x.started_at]
+    if not done:
+        return ""
+    spans = [(x.completed_at - x.started_at).total_seconds() for x in done]
+    text = f"avg {_span(sum(spans) / len(spans))} over {len(spans)}"
+    active = [worked[x.identifier] for x in done if x.identifier in (worked or {})]
+    return text + (f", worked {_span(sum(active) / len(active))}" if active else "")
+
+
+def _move_text(change) -> str:
+    return f"{change.from_status or 'new'} → {change.to_status}".replace("_", " ")
 
 
 def _when(moment) -> str:
-    """Local wall clock time; the day is named only when it is not today."""
-    local = moment.astimezone()
-    return local.strftime("%H:%M" if local.date() == date.today() else "%Y-%m-%d %H:%M")
+    """A UTC timestamp, labelled as such; the day is named only when it is not today."""
+    utc = moment.astimezone(timezone.utc)
+    return utc.strftime("%H:%M UTC" if utc.date().isoformat() == today() else "%Y-%m-%d %H:%M UTC")
 
 
 def _note(x, colour: str, cycle_name: str | None = None, vt: str = "") -> str:
@@ -264,8 +264,9 @@ def _columns(items) -> str:
     return f'<div class="cols">{"".join(cols)}</div>' if cols else '<p class="empty">No items</p>'
 
 
-def render_item(project, item, module=None, cycle=None, parent=None, children=(), needs=(), unblocks=()) -> str:
-    """Live detail page of one work item for `nod serve`: facts, description, epic, children, dependencies."""
+def render_item(project, item, module=None, cycle=None, parent=None, children=(), needs=(), unblocks=(), history=()) -> str:
+    """Live detail page of one work item for `nod serve`: facts, description, epic, children, dependencies,
+    and the recorded status history with the time each finished stage took."""
     x = item
     facts = [
         ("Status", f'<span class="badge s-{x.status.value}">{x.status.value.replace("_", " ")}</span>'),
@@ -289,6 +290,9 @@ def render_item(project, item, module=None, cycle=None, parent=None, children=()
         facts.append(("Branch", f'<span class="pill">⎇ {escape(x.branch_name)}</span>'))
     if x.from_branch or x.to_branch:
         facts.append(("Flow", f"{escape(x.from_branch or '?')} → {escape(x.to_branch or '?')}"))
+    for status, seconds in stage_seconds(history).items():
+        if status in ("in_progress", "hold", "todo"):
+            facts.append((f"Time {status.replace('_', ' ')}", _span(seconds)))
     if parent:
         facts.append(("Epic", _link(parent, f"<b>{escape(parent.identifier)}</b> {escape(parent.title)}")))
     if x.plan_path:
@@ -310,6 +314,14 @@ def render_item(project, item, module=None, cycle=None, parent=None, children=()
 
     groups = [(t, g) for t, g in (("Children", children), ("Needs first", needs), ("Unblocks", unblocks)) if g]
     lists = "".join(listing(i, title, group) for i, (title, group) in enumerate(groups, start=2))
+    if history:
+        moves = "".join(
+            f'<div class="line"><b>{c.at.strftime("%Y-%m-%d %H:%M:%S")} UTC</b> {_move_text(c)}</div>' for c in reversed(history)
+        )
+        lists += (
+            f'<h2><span class="chip">{len(groups) + 2:02d}</span>History</h2>'
+            f'<div class="panel"><div class="head">{len(history)} moves<small>newest first</small></div><div class="body">{moves}</div></div>'
+        )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>{escape(x.identifier)} · {escape(x.title)}</title>
@@ -328,7 +340,7 @@ def render_item(project, item, module=None, cycle=None, parent=None, children=()
 """
 
 
-def render_dashboard(project, cycles, items, modules, current=None) -> str:
+def render_dashboard(project, cycles, items, modules, current=None, activity=(), worked=None) -> str:
     """Live overview for `nod serve`: what is in progress now, every cycle with its
     progress, and the items of each open cycle by status."""
     colour = {m.id: NOTE_COLOURS[i % len(NOTE_COLOURS)] for i, m in enumerate(modules)}
@@ -354,7 +366,7 @@ def render_dashboard(project, cycles, items, modules, current=None) -> str:
             f"<div>{status}</div><div>{escape(dates)}</div>"
             f'<div class="track"><div class="fill on" style="width:{pct}%;view-transition-name:{href.strip("/").replace("/", "-")}"></div></div>'
             f"<div>{pct}% · {done}/{len(live)} done · {active} doing"
-            f"{f'<br><span class=dim>cycle time {average}</span>' if (average := _cycle_time(group)) else ''}</div></div>"
+            f"{f'<br><span class=dim>cycle time {average}</span>' if (average := _cycle_time(group, worked)) else ''}</div></div>"
         )
 
     rows = [
@@ -377,18 +389,26 @@ def render_dashboard(project, cycles, items, modules, current=None) -> str:
     if unplanned:
         sections.append(f'<h2><span class="chip">{len(open_) + 2:02d}</span><a href="/unplanned">No cycle</a></h2>{_columns(unplanned)}')
 
+    # newest first; each row keeps its own transition name, so a new move pushes the older ones down
+    feed = "".join(
+        f'<a href="/item/{quote(c.identifier, safe="")}" style="view-transition-name:e{c.id.replace("-", "")}">'
+        f"{c.at.strftime('%H:%M:%S')} UTC · {escape(c.identifier)} · {_move_text(c)}</a>"
+        for c in reversed(activity)
+    )
+
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>{escape(project.identifier)} · live</title>
 <style>{CSS}</style></head>
 <body><div class="page">
 <h1>{escape(project.identifier)} / Live</h1>
-<div class="meta"><span class="chip">{len(items)} items</span>{escape(project.name)} · {date.today().isoformat()}{f" · cycle time {average}" if (average := _cycle_time(items)) else ""}</div>
+<div class="meta"><span class="chip">{len(items)} items</span>{escape(project.name)} · {today()} UTC{f" · cycle time {average}" if (average := _cycle_time(items, worked)) else ""}</div>
 <h2><span class="chip">00</span>Now</h2>
 {now}
 <h2><span class="chip">01</span>Cycles</h2>
 {"".join(rows)}
 {"".join(sections)}
+<div id="feed">{feed}</div>
 <footer>Source: nod · {escape(project.name)}</footer>
 </div>{LIVE_SCRIPT}</body></html>
 """
@@ -444,7 +464,7 @@ def render_cycle(project, cycle, items, modules, live: bool = False) -> str:
 <style>{CSS}</style></head>
 <body><div class="page">
 <h1>{escape(project.identifier)} / {escape(cycle.name)}</h1>
-<div class="meta"><span class="chip">{escape(dates)}</span>{cycle.status.value} · generated {date.today().isoformat()}</div>
+<div class="meta"><span class="chip">{escape(dates)}</span>{cycle.status.value} · generated {today()}</div>
 {description}
 {now}
 <h2><span class="chip">01</span>Summary</h2>
